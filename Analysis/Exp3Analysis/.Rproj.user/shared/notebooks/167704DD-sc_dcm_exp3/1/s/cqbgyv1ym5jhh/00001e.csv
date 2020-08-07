@@ -1,0 +1,2 @@
+"0","exp3.counts.table2 <- ddply(exp3Data,~EventType+ProportionMarked,summarise,N=length(unique(workerId)))"
+"0","exp3.counts.table2"

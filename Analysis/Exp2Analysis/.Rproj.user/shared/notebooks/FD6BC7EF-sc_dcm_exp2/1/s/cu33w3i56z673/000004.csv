@@ -1,0 +1,4 @@
+"0","exp2.scores.by.block <- aggregate(score~workerId+Day+Block,data=exp2Data,FUN=mean)"
+"0","exp2.failed.noun.comprehension <- subset(exp2.scores.by.block,Block=='NounComprehension2' & score<0.7)"
+"0","exp2.failed.sentence.comprehension <- subset(exp2.scores.by.block,Block=='SentenceComprehension1' & score<0.7)"
+"0","ddply(exp2.failed.sentence.comprehension,~Day,summarise,N_excluded=length(unique(workerId)))"

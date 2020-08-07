@@ -1,0 +1,908 @@
+---
+title: "Experiment 3"
+author: "Kenny Smith and Jennifer Culbertson"
+date: "06/08/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(width = 300)
+library(ggplot2)
+library(plyr)
+library(dplyr)
+library(lme4)
+library(stargazer)
+
+#load utility functions
+source('../_Utilities.R')
+
+#define colours - don't think Jenny likes these, but easy to change! 
+#First one is neutral, e.g. for totals
+my.colours <- c("#808080","#EA7D00","#006DE9")
+```
+
+# Introduction
+
+Data analysis for Experiment 3. 
+
+
+Experiment 3 features two input language: 
+
+*40% Casemarked*: 40% SOV, 40% case, SOV (50% case) marked more than OSV (33% case). Here typicality alignment predicts a DOM-like effect on day 2 (animate patients are atypical, casemarking is atypical), and case-order correlation predicts an inverse-DOM (SOV marked more, SOV disprefered for animate patients).
+
+*60% Casemarked*: 40% SOV, 60% case, OSV (66% case) marked more than SOV (50% case). Here typicality alignment predicts a anti-DOM effect on day 2 (inanimate patients are typical, casemarking is typical), and case-order correlation predicts an inverse-DOM (OSV marked more, SOV prefered for animate patients).
+
+# Load the data.
+
+```{r exp3-loaddata}
+exp3Data <- read.csv('../RawData/exp3Data.csv') 
+
+#at some point we switched terminology in the paper from Agents Can/Cannot be Patients to Subjects Can/Cannot Be Objects - need to correct this throughout
+exp3Data$EventType <- revalue(exp3Data$EventType,
+                              c("Agents Cannot Be Patients"="Subjects Cannot Be Objects",
+                                "Agents Can Be Patients"="Subjects Can Be Objects"))
+
+#day needs to be a factor for the stats
+exp3Data$Day <- as.factor(exp3Data$Day)
+
+#Subjects Cannot Be Objects needs to be reference level
+exp3Data$EventType <- as.factor(exp3Data$EventType)
+exp3Data$EventType <- relevel(exp3Data$EventType,
+                                        ref="Subjects Cannot Be Objects")
+
+```
+
+# Counts of participants and participant exclusions per day
+
+```{r exp3-counts}
+#got this from https://stackoverflow.com/questions/12840294/counting-unique-distinct-values-by-group-in-a-data-frame
+exp3.counts.table <- ddply(exp3Data,~Day+EventType+ProportionMarked,summarise,N=length(unique(workerId)))
+exp3.counts.table
+
+exp3.counts.table2 <- ddply(exp3Data,~EventType+ProportionMarked,summarise,N=length(unique(workerId)))
+exp3.counts.table2
+
+exp3.counts.table3 <- ddply(exp3Data,~Day,summarise,N=length(unique(workerId)))
+exp3.counts.table3
+
+exp3.scores.by.block <- aggregate(score~workerId+Day+Block,data=exp3Data,FUN=mean)
+exp3.failed.noun.comprehension <- subset(exp3.scores.by.block,Block=='NounComprehension2' & score<0.7)
+exp3.failed.sentence.comprehension <- subset(exp3.scores.by.block,Block=='SentenceComprehension1' & score<0.7)
+ddply(exp3.failed.noun.comprehension,~Day,summarise,N_excluded=length(unique(workerId)))
+ddply(exp3.failed.sentence.comprehension,~Day,summarise,N_excluded=length(unique(workerId)))
+```
+
+# Results
+
+## Identification accuracy on comprehension trials
+
+Combined plot.
+
+```{r,echo=FALSE}
+
+exp3.score.summary <- aggregate(score~casemarked+Animacy+Day+EventType+workerId,data=subset(exp3Data,Block=="SentenceComprehension1"),FUN=mean)
+exp3.score.summary$casemarked <- revalue(as.factor(exp3.score.summary$casemarked),
+                                    c("FALSE"="Patient not casemarked",
+                                      "TRUE"="Patient casemarked"))
+
+#for the dotplot, there are too many participants at ceiling to show the dots - instead I am going 
+#to withhold those dots and add a numerical annotation
+exp3.score.summary$IsPerfect <- ifelse(exp3.score.summary$score==1,1,0)
+exp3.score.perfect.ns <- data.frame(summarize(group_by(subset(exp3.score.summary,IsPerfect==1),Day,Animacy,casemarked,EventType,.drop = FALSE),n()))
+exp3.score.perfect.ns <- plyr::rename(exp3.score.perfect.ns,c("n.."="count"))
+
+```
+
+```{r}
+ggplot(data=exp3.score.summary, aes(x=Day, y=score,fill=Animacy,colour=Animacy)) +
+  #facet by condition and marking
+  facet_grid(EventType~casemarked) +
+  
+  #points and CIs for score by animacy
+  stat_summary(geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min", fun.ymax="max",
+               width=0.3,position=position_dodge(0.9),colour='black') + 
+  stat_summary(geom='point', fun.y='mean', position=position_dodge(0.9),size=3) +
+  stat_summary(geom='point', fun.y='mean', position=position_dodge(0.9),size=3,shape=1,colour='black') +
+  
+  #horizontal line showing chance
+  geom_hline(yintercept=0.5,linetype=3) + 
+  
+  #by-participant data
+  geom_dotplot(data=subset(exp3.score.summary,IsPerfect==0),
+               aes(x=Day, y=score, shape=Animacy),binaxis = "y", 
+               stackdir = "centerwhole",stackratio=1,alpha=0.5,dotsize=1,
+               position=position_dodge(0.9),binpositions='all',binwidth=1/100) +
+  geom_text(data=exp3.score.perfect.ns,aes(x=Day,y=1.05,label=count),position=position_dodge(0.9),size=3,colour='black') +
+  
+  #force all points to be circles, and exclude from legend
+  scale_shape_manual(values=c(19,19),guide=FALSE)+
+  
+  #then various axis/legend stuff
+  xlab("Day") + 
+  theme_bw() + 
+  #ylab("Proportion correct responses") + 
+  scale_y_continuous(name="Proportion correct responses",breaks=seq(0,1,0.25)) +
+  theme(legend.title=element_blank(),legend.position="top") + 
+  scale_fill_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate patient", "Animate patient")) + 
+  scale_colour_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate patient", "Animate patient")) +
+  ggsave("../Figures/exp3-identification-accuracy.pdf",width=9, height=9)
+```
+
+Plots seperated by ProportionMarked, since there was some suggestion this mattered in Experiments 1--2.
+
+```{r,echo=FALSE}
+
+exp3low.score.summary <- aggregate(score~casemarked+Animacy+Day+EventType+workerId,
+                                   data=subset(exp3Data,Block=="SentenceComprehension1" & ProportionMarked=="40% Casemarked"),
+                                   FUN=mean)
+exp3low.score.summary$casemarked <- revalue(as.factor(exp3low.score.summary$casemarked),
+                                    c("FALSE"="Patient not casemarked",
+                                      "TRUE"="Patient casemarked"))
+
+#for the dotplot, there are too many participants at ceiling to show the dots - instead I am going 
+#to withhold those dots and add a numerical annotation
+exp3low.score.summary$IsPerfect <- ifelse(exp3low.score.summary$score==1,1,0)
+exp3low.score.perfect.ns <- data.frame(summarize(group_by(subset(exp3low.score.summary,IsPerfect==1),Day,Animacy,casemarked,EventType,.drop = FALSE),n()))
+exp3low.score.perfect.ns <- plyr::rename(exp3low.score.perfect.ns,c("n.."="count"))
+
+```
+
+```{r}
+ggplot(data=exp3low.score.summary, aes(x=Day, y=score,fill=Animacy,colour=Animacy)) +
+  #facet by condition and marking
+  facet_grid(EventType~casemarked) +
+  
+  #points and CIs for score by animacy
+  stat_summary(geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min", fun.ymax="max",
+               width=0.3,position=position_dodge(0.9),colour='black') + 
+  stat_summary(geom='point', fun.y='mean', position=position_dodge(0.9),size=3) +
+  stat_summary(geom='point', fun.y='mean', position=position_dodge(0.9),size=3,shape=1,colour='black') +
+  
+  #horizontal line showing chance
+  geom_hline(yintercept=0.5,linetype=3) + 
+  
+  #by-participant data
+  geom_dotplot(data=subset(exp3low.score.summary,IsPerfect==0),
+               aes(x=Day, y=score, shape=Animacy),binaxis = "y", 
+               stackdir = "centerwhole",stackratio=1,alpha=0.5,dotsize=1,
+               position=position_dodge(0.9),binpositions='all',binwidth=1/100) +
+  geom_text(data=exp3low.score.perfect.ns,aes(x=Day,y=1.05,label=count),position=position_dodge(0.9),size=3,colour='black') +
+  
+  #force all points to be circles, and exclude from legend
+  scale_shape_manual(values=c(19,19),guide=FALSE)+
+  
+  #then various axis/legend stuff
+  xlab("Day") + 
+  theme_bw() + 
+  #ylab("Proportion correct responses") + 
+  scale_y_continuous(name="Proportion correct responses",breaks=seq(0,1,0.25)) +
+  theme(legend.title=element_blank(),legend.position="top") + 
+  scale_fill_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate patient", "Animate patient")) + 
+  scale_colour_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate patient", "Animate patient")) +
+  ggsave("../Figures/exp3-low-identification-accuracy.pdf",width=9, height=9)
+```
+
+```{r,echo=FALSE}
+
+exp3high.score.summary <- aggregate(score~casemarked+Animacy+Day+EventType+workerId,
+                                   data=subset(exp3Data,Block=="SentenceComprehension1" & ProportionMarked=="60% Casemarked"),
+                                   FUN=mean)
+exp3high.score.summary$casemarked <- revalue(as.factor(exp3high.score.summary$casemarked),
+                                    c("FALSE"="Patient not casemarked",
+                                      "TRUE"="Patient casemarked"))
+
+#for the dotplot, there are too many participants at ceiling to show the dots - instead I am going 
+#to withhold those dots and add a numerical annotation
+exp3high.score.summary$IsPerfect <- ifelse(exp3high.score.summary$score==1,1,0)
+exp3high.score.perfect.ns <- data.frame(summarize(group_by(subset(exp3high.score.summary,IsPerfect==1),Day,Animacy,casemarked,EventType,.drop = FALSE),n()))
+exp3high.score.perfect.ns <- plyr::rename(exp3high.score.perfect.ns,c("n.."="count"))
+
+```
+
+```{r}
+ggplot(data=exp3high.score.summary, aes(x=Day, y=score,fill=Animacy,colour=Animacy)) +
+  #facet by condition and marking
+  facet_grid(EventType~casemarked) +
+  
+  #points and CIs for score by animacy
+  stat_summary(geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min", fun.ymax="max",
+               width=0.3,position=position_dodge(0.9),colour='black') + 
+  stat_summary(geom='point', fun.y='mean', position=position_dodge(0.9),size=3) +
+  stat_summary(geom='point', fun.y='mean', position=position_dodge(0.9),size=3,shape=1,colour='black') +
+  
+  #horizontal line showing chance
+  geom_hline(yintercept=0.5,linetype=3) + 
+  
+  #by-participant data
+  geom_dotplot(data=subset(exp3high.score.summary,IsPerfect==0),
+               aes(x=Day, y=score, shape=Animacy),binaxis = "y", 
+               stackdir = "centerwhole",stackratio=1,alpha=0.5,dotsize=1,
+               position=position_dodge(0.9),binpositions='all',binwidth=1/100) +
+  geom_text(data=exp3high.score.perfect.ns,aes(x=Day,y=1.05,label=count),position=position_dodge(0.9),size=3,colour='black') +
+  
+  #force all points to be circles, and exclude from legend
+  scale_shape_manual(values=c(19,19),guide=FALSE)+
+  
+  #then various axis/legend stuff
+  xlab("Day") + 
+  theme_bw() + 
+  #ylab("Proportion correct responses") + 
+  scale_y_continuous(name="Proportion correct responses",breaks=seq(0,1,0.25)) +
+  theme(legend.title=element_blank(),legend.position="top") + 
+  scale_fill_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate patient", "Animate patient")) + 
+  scale_colour_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate patient", "Animate patient")) +
+  ggsave("../Figures/exp3-low-identification-accuracy.pdf",width=9, height=9)
+```
+
+It does look like there's an interesting difference - plotting only unmarked items to try to show it.
+
+```{r,echo=FALSE}
+
+exp3unmarked.score.summary <- aggregate(score~Animacy+Day+
+                                          EventType+ProportionMarked+workerId,
+                                   data=subset(exp3Data,Block=="SentenceComprehension1" & !casemarked),
+                                   FUN=mean)
+
+
+#for the dotplot, there are too many participants at ceiling to show the dots - instead I am going 
+#to withhold those dots and add a numerical annotation
+exp3unmarked.score.summary$IsPerfect <- ifelse(exp3unmarked.score.summary$score==1,1,0)
+exp3unmarked.score.perfect.ns <- data.frame(summarize(group_by(subset(exp3unmarked.score.summary,IsPerfect==1),Day,Animacy,EventType,ProportionMarked,.drop = FALSE),n()))
+exp3unmarked.score.perfect.ns <- plyr::rename(exp3unmarked.score.perfect.ns,c("n.."="count"))
+
+```
+
+```{r}
+ggplot(data=exp3unmarked.score.summary, aes(x=Day, y=score,fill=Animacy,colour=Animacy)) +
+  #facet by condition and marking
+  facet_grid(EventType~ProportionMarked) +
+  
+  #points and CIs for score by animacy
+  stat_summary(geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min", fun.ymax="max",
+               width=0.3,position=position_dodge(0.9),colour='black') + 
+  stat_summary(geom='point', fun.y='mean', position=position_dodge(0.9),size=3) +
+  stat_summary(geom='point', fun.y='mean', position=position_dodge(0.9),size=3,shape=1,colour='black') +
+  
+  #horizontal line showing chance
+  geom_hline(yintercept=0.5,linetype=3) + 
+  
+  #by-participant data
+  geom_dotplot(data=subset(exp3unmarked.score.summary,IsPerfect==0),
+               aes(x=Day, y=score, shape=Animacy),binaxis = "y", 
+               stackdir = "centerwhole",stackratio=1,alpha=0.5,dotsize=1,
+               position=position_dodge(0.9),binpositions='all',binwidth=1/100) +
+  geom_text(data=exp3unmarked.score.perfect.ns,aes(x=Day,y=1.05,label=count),position=position_dodge(0.9),size=3,colour='black') +
+  
+  #force all points to be circles, and exclude from legend
+  scale_shape_manual(values=c(19,19),guide=FALSE)+
+  
+  #then various axis/legend stuff
+  xlab("Day") + 
+  theme_bw() + 
+  #ylab("Proportion correct responses") + 
+  scale_y_continuous(name="Proportion correct responses",breaks=seq(0,1,0.25)) +
+  theme(legend.title=element_blank(),legend.position="top") + 
+  scale_fill_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate patient", "Animate patient")) + 
+  scale_colour_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate patient", "Animate patient")) +
+  ggsave("../Figures/exp3-unmarked-identification-accuracy.pdf",width=9, height=9)
+```
+
+For the stats, I am going to run on animate patients only (as previously) but also only on unmarked nouns, to keep the reporting of stats manageable. Deviation-coding Case Frequency so we can see accuracy of all participants in the Subjects Cannot Be Objects condition.
+
+```{r exp3-identification-accuracy-stat-1, cache=TRUE}
+exp3Data$ProportionMarked <- relevel(as.factor(exp3Data$ProportionMarked),ref="40% Casemarked")
+contrasts(exp3Data$ProportionMarked) <- c(-0.5,0.5)
+```
+
+```{r, cache=TRUE}
+exp3.score.model.1 <- glmer(score~ Day * EventType * ProportionMarked  + (1 + Day | workerId),data=subset(exp3Data,Block=="SentenceComprehension1" & Animacy & !casemarked),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=50000)))
+```
+
+As expected, above chance in the Subjects Cannot Be Objects condition, and improve each day. Interestingly, they are performing *worse* in the 60% Marked condition on unmarked items on day 2, which suggests we see the same thing as in previous experiments, namely more attention to the word order cue when case is less frequent. Day x Case Frequency interaction shows this effect is larger on day 4.
+```{r}
+summary(exp3.score.model.1)
+```
+
+
+This level of performance (unmarked, Subjects Cannot Be Objects) is higher than could be achieved by making optimal use of word order cues to agency:
+```{r}
+my.logodds.p(0.6,exp3.score.model.1,"(Intercept)")
+```
+
+Need this recoded model to assess whether participants in the Subjects Can Be Objects condition are above chance on Day 1. They are not, obviously.
+
+```{r}
+levels(exp3Data$EventType)
+```
+
+```{r exp3-identification-accuracy-stat-recoded, cache=TRUE}
+exp3Data$EventTypeR <- exp3Data$EventType
+exp3Data$EventTypeR <- relevel(exp3Data$EventTypeR, ref='Subjects Can Be Objects')
+contrasts(exp3Data$EventTypeR) <- NULL
+exp3.score.model.1r <- glmer(score~ Day * EventTypeR * ProportionMarked  + (1 + Day | workerId),data=subset(exp3Data,Block=="SentenceComprehension1" & Animacy & !casemarked),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=50000)))
+```
+
+```{r}
+summary(exp3.score.model.1r)
+```
+
+Check against 60% (note that it is numerically lower, so significance indicates accuracy *below* the level offered by relying on word order).
+
+```{r}
+my.logodds.p(0.6,exp3.score.model.1r,"(Intercept)")
+```
+
+Treatment-code ProportionMarked so I can get a look at the ones where they are most likely to be attending to word order. They are not above chance on day 1.
+```{r exp3-identification-accuracy-stat-recoded2, cache=TRUE}
+contrasts(exp3Data$ProportionMarked) <- NULL
+exp3.score.model.1r2 <- glmer(score~ Day * EventTypeR * ProportionMarked  + (1 + Day | workerId),data=subset(exp3Data,Block=="SentenceComprehension1" & Animacy & !casemarked),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=50000)))
+```
+
+```{r}
+summary(exp3.score.model.1r2)
+```
+
+Relevel again to look at day=4. Not above chance here either - so the signficant effect of ProportionMarked seen in exp3.score.model.1 must be dependent on the Subjects Cannot Be Objects guys as well.
+
+```{r exp3-identification-accuracy-stat-recoded3, cache=TRUE}
+exp3Data$DayR <- relevel(exp3Data$Day,ref="4")
+exp3.score.model.1r3 <- glmer(score~ DayR * EventTypeR * ProportionMarked  + (1 + DayR | workerId),data=subset(exp3Data,Block=="SentenceComprehension1" & Animacy & !casemarked),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=50000)))
+```
+
+```{r}
+summary(exp3.score.model.1r3)
+```
+
+## Effect of animacy on word order
+
+Want to check for effect we say in Exp 1 and 2, namely more frequent use of SOV with inanimate patients (= higher use of OSV with animate patients).
+
+```{r exp3-wordorder}
+exp3.sov.summary.by.animacy <- aggregate(isSOV~Animacy+Day+ProportionMarked + workerId,data=subset(exp3Data,Block=="SentenceTest1" & grammatical),FUN=mean)
+#this is aggregating over animacy
+exp3.sov.summary.total <- aggregate(isSOV~Day+ProportionMarked+workerId,data=subset(exp3Data,Block=="SentenceTest1" & grammatical),FUN=mean)
+#needs to have this column for plotting compatability with casemarking.summary.by.animacy
+exp3.sov.summary.total$Animacy <- "All" 
+
+ggplot(data=exp3.sov.summary.by.animacy, aes(x=Day, y=isSOV, fill=Animacy, colour=Animacy)) +
+  facet_grid(ProportionMarked~.) +
+  #points and CIs for word order by animacy
+  stat_summary(geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min", fun.ymax="max",width=0.3,position=position_dodge(0.9),color='black') +
+  stat_summary(geom='point', fun.y='mean', position=position_dodge(0.9), size=3) +
+  stat_summary(geom='point', fun.y='mean', position=position_dodge(0.9), size=3, shape=1, colour='black') +
+  
+  #point 95CI for grand means
+  stat_summary(data=exp3.sov.summary.total,geom='errorbar', 
+               fun.data='mean_cl_boot',fun.ymin="min", fun.ymax="max",width=0.15,position=position_dodge(0.9),
+               color='black',show.legend = FALSE) +
+  stat_summary(data=exp3.sov.summary.total,geom='point', fun.y='mean', position=position_dodge(0.9),
+               size=3) +
+  stat_summary(data=exp3.sov.summary.total,geom='point', fun.y='mean', position=position_dodge(0.9),
+               size=3, shape=1, colour='black') +
+  
+  #by-participant data
+  geom_dotplot(aes(x=Day, y=isSOV, shape=Animacy),binaxis = "y", stackdir = "center",alpha=0.5,dotsize=1,position=position_dodge(0.9),binpositions='all',binwidth=1/100) + 
+  #then various axis/legend stuff
+  xlab("Day") + 
+  theme_bw() + 
+  ylab("Proportion of SOV sentences") + 
+  theme(legend.title=element_blank()) + 
+  scale_colour_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate patient", "Animate patient")) +
+  scale_fill_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate patient", "Animate patient")) +
+  ggsave("../Figures/exp3-wordorder.pdf",width=9, height=9)
+```
+
+
+```{r exp3-wordorder-stat,cache=TRUE}
+exp3Data$Animacy <- as.factor(exp3Data$Animacy)
+contrasts(exp3Data$Animacy) <- c(-0.5,0.5)
+contrasts(exp3Data$ProportionMarked) <- c(-0.5,0.5)
+
+exp3.sovorder.model.1 <- glmer(isSOV ~ Animacy * Day * ProportionMarked + (1 + Animacy * Day | workerId),data=subset(exp3Data,Block=="SentenceTest1" & grammatical),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=50000)))
+```
+
+Looks like the effect of animacy on word order is in the usual direction, but n.s. 
+
+```{r}
+summary(exp3.sovorder.model.1)
+```
+
+
+## Learning of the word order and case correlation in the input?
+
+Recall that in the input SOV is *more* likely to be case marked than OSV in the Low Case Frequency condition. In common with Exp 1, they are not doing great with this. In the High case frequency condition, SOV is *less* likely to be case marked than OSV, and like in Experiment 2 they get this.
+
+```{r exp3-wordorder-case-plot}
+exp3.case.summary.by.order <- aggregate(casemarked~Day+WordOrder+ProportionMarked+workerId,data=subset(exp3Data,Block=="SentenceTest1" & grammatical),FUN=mean)
+
+#input levels
+exp3low.inputs <- data.frame(Day=rep(c(1,2,3),2),
+                          WordOrder=rep(c('OSV','SOV'),each=3),
+                          casemarked=rep(c(1/3,1/2),each=3),
+                          ProportionMarked="40% Casemarked")
+exp3high.inputs <- data.frame(Day=rep(c(1,2,3),2),
+                          WordOrder=rep(c('OSV','SOV'),each=3),
+                          casemarked=rep(c(2/3,1/2),each=3),
+                          ProportionMarked="60% Casemarked")
+exp3.inputs <- rbind(exp3low.inputs,exp3high.inputs)
+
+ggplot(data=exp3.case.summary.by.order, aes(x=Day, y=casemarked, fill=WordOrder, colour=WordOrder)) +
+  facet_grid(ProportionMarked~.) +
+  #points and CIs for marking by word order
+  stat_summary(geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min", fun.ymax="max",width=0.3,position=position_dodge(0.9),color='black') +
+  stat_summary(geom='point', fun.y='mean', position=position_dodge(0.9), size=3) +
+  stat_summary(geom='point', fun.y='mean', position=position_dodge(0.9), size=3, shape=1, colour='black') +
+  
+  #horizontal lines showing input
+  geom_errorbar(data=exp3.inputs, aes(x=Day,ymax=casemarked, ymin=casemarked),position=position_dodge(0.9),linetype=3) +
+  
+  #by-participant data
+  geom_dotplot(aes(x=Day, y=casemarked, shape=WordOrder),binaxis = "y", stackdir = "center",alpha=0.5,dotsize=2,position=position_dodge(0.9),binpositions='all',binwidth=1/100) + 
+  
+  #then various axis/legend stuff
+  xlab("Day") + 
+  theme_bw() + 
+  ylab("Proportion of case-marked patients") + 
+  theme(legend.title=element_blank()) + 
+  scale_fill_manual(values=my.colours) + 
+  scale_colour_manual(values=my.colours) + 
+  
+  ggsave("../Figures/exp3-case-by-order.pdf",width=9, height=6)
+
+```
+
+Stat - not including EventType here since I didn't in the equivalent analyses earlier. Treatment-coding ProportionMarked so I can see the effects in the two input languages somewhat separately.
+
+```{r exp3-wordorder-case-stat,cache=TRUE}
+
+contrasts(exp3Data$WordOrder) <- c(-0.5,0.5)
+contrasts(exp3Data$EventType) <- c(-0.5,0.5)
+contrasts(exp3Data$ProportionMarked) <- NULL
+exp3.caseorder.model.1 <- glmer(casemarked ~ WordOrder *Day * ProportionMarked + (1 + WordOrder * Day | workerId),data=subset(exp3Data,Block=="SentenceTest1" & grammatical),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=50000)))
+
+```
+
+This model shows the expected effects - ProportionMarked (more marking in the 60% condition), no effect of order in the 40% condition, but an order x ProportionMarked interaction.
+```{r}
+summary(exp3.caseorder.model.1)
+```
+
+
+
+## Effect of animacy on casemarking
+
+Plotting with facets for ProportionMarked and EventType - it's a bit messy...
+```{r exp3-casemarking} 
+exp3.casemarking.summary.by.animacy <- aggregate(casemarked~Animacy+Day+ProportionMarked+EventType+workerId,data=subset(exp3Data,Block=="SentenceTest1" & grammatical),FUN=mean)
+#this is aggregating over animacy
+exp3.casemarking.summary.total <- aggregate(casemarked~Day+ProportionMarked+EventType+workerId,data=subset(exp3Data,Block=="SentenceTest1" & grammatical),FUN=mean)
+#needs to have this column for plotting compatability with casemarking.summary.by.animacy
+exp3.casemarking.summary.total$Animacy <- "All" 
+
+#Need inputs 
+exp3lowfalse.inputs.2 <- data.frame(Day=rep(c(1,2,3),2),
+                          EventType=rep(c('Subjects Cannot Be Objects','Subjects Can Be Objects'),each=3),
+                          casemarked=rep(0.4,each=6),
+                          ProportionMarked="40% Casemarked",
+                          Animacy=FALSE)
+exp3lowtrue.inputs.2 <- data.frame(Day=rep(c(1,2,3),2),
+                          EventType=rep(c('Subjects Cannot Be Objects','Subjects Can Be Objects'),each=3),
+                          casemarked=rep(0.4,each=6),
+                          ProportionMarked="40% Casemarked",
+                          Animacy=TRUE)
+exp3highfalse.inputs.2 <- data.frame(Day=rep(c(1,2,3),2),
+                          EventType=rep(c('Subjects Cannot Be Objects','Subjects Can Be Objects'),each=3),
+                          casemarked=rep(0.6,each=6),
+                          ProportionMarked="60% Casemarked",
+                          Animacy=FALSE)
+exp3hightrue.inputs.2 <- data.frame(Day=rep(c(1,2,3),2),
+                          EventType=rep(c('Subjects Cannot Be Objects','Subjects Can Be Objects'),each=3),
+                          casemarked=rep(0.6,each=6),
+                          ProportionMarked="60% Casemarked",
+                          Animacy=TRUE)
+
+
+exp3.inputs.2 <- rbind(exp3lowfalse.inputs.2,exp3lowtrue.inputs.2,exp3highfalse.inputs.2,exp3hightrue.inputs.2)
+
+#There are a lot of participants at floor, so need to add text annotations.
+exp3.casemarking.summary.by.animacy$IsFloor <- ifelse(exp3.casemarking.summary.by.animacy$casemarked==0,1,0)
+
+exp3.casemarking.summary.by.animacy$Day <- droplevels(exp3.casemarking.summary.by.animacy$Day)
+exp3.casemarking.floor.ns <- data.frame(summarize(group_by(subset(exp3.casemarking.summary.by.animacy,IsFloor==1 & Day!=1),Day,Animacy,ProportionMarked,EventType,.drop = FALSE),n()))
+exp3.casemarking.floor.ns <- plyr::rename(exp3.casemarking.floor.ns,c("n.."="count"))
+
+
+ggplot(data=exp3.casemarking.summary.by.animacy, aes(x=Day, y=casemarked,
+                                                     colour=Animacy,fill=Animacy)) +
+  facet_grid(EventType~ProportionMarked) +
+  #bars and CIs for casemarking by animacy
+  stat_summary(geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min", fun.ymax="max",width=0.3,position=position_dodge(0.9),colour='black') + 
+  stat_summary(geom='point',fun.y='mean', position=position_dodge(0.9),size=3) +
+  stat_summary(geom='point',fun.y='mean', position=position_dodge(0.9),size=3,shape=1,colour='black') +
+  
+  #point 95CI for grand means
+  stat_summary(data=exp3.casemarking.summary.total,aes(x=Day,y=casemarked),geom='errorbar',
+               fun.data='mean_cl_boot',fun.ymin="min",
+               fun.ymax="max",width=0.15,position=position_dodge(0.9),
+               colour='black',show.legend = FALSE) +
+  stat_summary(data=exp3.casemarking.summary.total,aes(x=Day,y=casemarked),geom='point', fun.y='mean', position=position_dodge(0.9),shape=19,size=3,show.legend = FALSE) +
+  stat_summary(data=exp3.casemarking.summary.total,aes(x=Day,y=casemarked),geom='point', fun.y='mean', position=position_dodge(0.9),shape=1,size=3,colour='black',show.legend = FALSE) +
+  
+  #horizontal lines showing input
+  geom_errorbar(data=exp3.inputs.2, aes(x=Day,ymax=casemarked, ymin=casemarked),position=position_dodge(0.9),
+                linetype=3,colour='black') +
+  
+  #by-participant data
+  geom_dotplot(data=subset(exp3.casemarking.summary.by.animacy,!IsFloor), 
+               aes(x=Day, y=casemarked, shape=Animacy),binaxis = "y", 
+               stackdir = "centerwhole",stackratio=1,alpha=0.5,dotsize=1.5,
+               position=position_dodge(0.9),binpositions='all',binwidth=1/100) +
+  geom_text(data=exp3.casemarking.floor.ns,aes(x=Day,y=-0.05,label=count),
+            position=position_dodge(0.9),size=3,colour='black') +
+  
+  
+  #force all points to be circles, and exclude from legend
+  scale_shape_manual(values=c(21,21),guide=FALSE)+
+  #then various axis/legend stuff
+  xlab("Day") + 
+  theme_bw() + 
+  ylab("Proportion of case-marked patients") + 
+  theme(legend.title=element_blank()) + 
+  scale_fill_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate patient", "Animate patient")) +
+  scale_colour_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate patient", "Animate patient")) +
+  ggsave("../Figures/exp3-casemarking.pdf",width=9, height=9)
+
+```
+
+
+```{r}
+exp3Data$Animacy <- factor(exp3Data$Animacy)
+contrasts(exp3Data$Animacy) <- c(-0.5,0.5)
+```
+
+```{r exp3-casemarking-stat-1,cache=TRUE}
+#This is the stat for the full manipulation
+contrasts(exp3Data$EventType) <- c(-0.5,0.5)
+exp3.case.marking.model.1 <- glmer(casemarked ~ Animacy * EventType * ProportionMarked * Day + (1 + Animacy * Day | workerId),data=subset(exp3Data,Block=="SentenceTest1" & grammatical),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=50000)))
+
+```
+
+```{r}
+summary(exp3.case.marking.model.1)
+```
+
+What's the Case Frequency x EventType thing about? Seperate analyses by ProportionMarked.
+
+```{r exp3-casemarking-stat-2,cache=TRUE}
+exp3.case.marking.model.lowonly <- glmer(casemarked ~ Animacy * EventType * Day + (1 + Animacy * Day | workerId),data=subset(exp3Data,Block=="SentenceTest1" & grammatical & ProportionMarked=="40% Casemarked"),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=50000)))
+
+exp3.case.marking.model.highonly <- glmer(casemarked ~ Animacy * EventType * Day + (1 + Animacy * Day | workerId),data=subset(exp3Data,Block=="SentenceTest1" & grammatical & ProportionMarked=="60% Casemarked"),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=50000)))
+
+```
+
+Marginal and negative effect of EventType in the Low condition (i.e. less marking across the board in Subjects Can Be Objects).
+```{r}
+summary(exp3.case.marking.model.lowonly)
+```
+
+Significant and positive here, i.e. more marking of case in the EventType condition. NB the negative interaction with animacy though - this seems to only be for inanimates!
+
+```{r}
+summary(exp3.case.marking.model.highonly)
+```
+
+
+Same analysis controlling for word order - dropping order x EventType interactions, on same logic as for exps 1-2.
+
+```{r exp3-casemarking-stat-3,cache=TRUE}
+exp3.case.marking.model.3 <- glmer(casemarked ~ Animacy * ProportionMarked * Day * (EventType + WordOrder) 
+                                   + (1  | workerId) 
+                                   + (0 + Animacy * Day * WordOrder 
+                                      - Animacy:Day:WordOrder
+                                      - Animacy:Day | workerId),data=subset(exp3Data,Block=="SentenceTest1" & grammatical),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=100000)))
+
+```
+
+That produces convergence code 0 - that's not a warning though. 
+
+```{r}
+summary(exp3.case.marking.model.3)
+car::vif(exp3.case.marking.model.3)
+```
+
+
+Model comparison - are we better with a model featuring animacy (as predicted under efficient communication), or animacy * proportion (as predicted under typicality alignment/case-order correlation)?
+
+```{r exp3-model-comparison, cache=TRUE}
+comparison.model.a <- glmer(casemarked ~ (Animacy + ProportionMarked) * Day + (1 + Animacy * Day | workerId),data=subset(exp3Data,Block=="SentenceTest1" & grammatical),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=50000)))
+
+comparison.model.b <- glmer(casemarked ~ Animacy * ProportionMarked * Day + (1 + Animacy * Day | workerId),data=subset(exp3Data,Block=="SentenceTest1" & grammatical),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=50000)))
+```
+
+```{r}
+anova(comparison.model.a,comparison.model.b)
+```
+
+## Communicative accuracy in interaction.
+
+Already have facets by EventType and casemarking, so probably want to collapse over case frequency.
+
+```{r exp3-interaction-success}
+
+#since there is some data munging here, will set this up as a seperate data frame
+exp3InteractionSuccessData <- droplevels(subset(exp3Data,((Block=="Interaction" & grammatical) | (Block=="InteractionMatch")) & Day==4))
+
+exp3.interaction.success.summary <- aggregate(score~Block+Animacy+EventType+casemarked+workerId,data=exp3InteractionSuccessData,FUN=mean)
+
+exp3.interaction.success.summary$casemarked <- revalue(as.factor(exp3.interaction.success.summary$casemarked),
+                                    c("FALSE"="Patient not casemarked",
+                                      "TRUE"="Patient casemarked"))
+exp3.interaction.success.summary$Block <- plyr::revalue(exp3.interaction.success.summary$Block,
+                                                        c("Interaction"="Participant Directs,\nSmeeble Matches",
+                                                          "InteractionMatch"="Smeeble Directs,\nParticipant Matches"))
+
+#for the dotplot, there are too many participants at ceiling to show the dots - instead I am going 
+#to withhold those dots and add a numerical annotation
+exp3.interaction.success.summary$IsPerfect <- ifelse(exp3.interaction.success.summary$score==1,1,0)
+exp3.interaction.score.perfect.ns <- data.frame(summarize(group_by(subset(exp3.interaction.success.summary,IsPerfect==1),Block,Animacy,casemarked,EventType,.drop = FALSE),n()))
+exp3.interaction.score.perfect.ns <- plyr::rename(exp3.interaction.score.perfect.ns,c("n.."="count"))
+```
+
+
+
+
+```{r exp3-interaction-success-plot}
+
+ggplot(data=exp3.interaction.success.summary, aes(x=Block, y=score,
+                                                  colour=Animacy,fill=Animacy)) +
+  facet_grid(EventType~casemarked) +
+  #points and CIs for casemarking by animacy
+  stat_summary(geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min",
+               fun.ymax="max",width=0.3,position=position_dodge(0.9),color='black') + 
+  stat_summary(geom='point', fun.y='mean', position=position_dodge(0.9),size=3) +
+  stat_summary(geom='point', fun.y='mean', position=position_dodge(0.9),size=3,
+               shape=1,colour='black') +
+  
+  
+  #horizontal line showing chance
+  geom_hline(yintercept=0.5,linetype=3) +
+  #by-participant data
+  geom_dotplot(data=subset(exp3.interaction.success.summary,IsPerfect==0),aes(x=Block, y=score, shape=Animacy),binaxis = "y", stackdir = "center",alpha=0.5,dotsize=2,position=position_dodge(0.9),binpositions='all',binwidth=1/100) + 
+  geom_text(data=exp3.interaction.score.perfect.ns,aes(x=Block,y=1.05,label=count),position=position_dodge(0.9),size=3,colour='black') +
+  
+  #then various axis/legend stuff
+  xlab("") + 
+  theme_bw() + 
+  scale_y_continuous(name="Proportion correct responses",breaks=seq(0,1,0.25)) +
+  theme(legend.title=element_blank()) + 
+  scale_colour_manual(values=my.colours[c(2,3)],breaks=c("FALSE", "TRUE"),labels=c("Inanimate patient", "Animate patient")) + 
+  scale_fill_manual(values=my.colours[c(2,3)],breaks=c("FALSE", "TRUE"),labels=c("Inanimate patient", "Animate patient")) + 
+  ggsave("../Figures/exp3-interaction-success.pdf",width=9, height=6)
+```
+
+Just in case there's anything lurking, here's the same plot split by Low vs High. All looks as expected.
+
+```{r exp3-interaction-success-low}
+
+#since there is some data munging here, will set this up as a seperate data frame
+exp3InteractionSuccessDataLow <- droplevels(subset(exp3Data,((Block=="Interaction" & grammatical) | (Block=="InteractionMatch")) & Day==4 & ProportionMarked=="40% Casemarked"))
+
+exp3.interaction.success.summary.low <- aggregate(score~Block+Animacy+EventType+casemarked+workerId,data=exp3InteractionSuccessDataLow,FUN=mean)
+
+exp3.interaction.success.summary.low$casemarked <- revalue(as.factor(exp3.interaction.success.summary.low$casemarked),
+                                    c("FALSE"="Patient not casemarked",
+                                      "TRUE"="Patient casemarked"))
+exp3.interaction.success.summary.low$Block <- plyr::revalue(exp3.interaction.success.summary.low$Block,
+                                                        c("Interaction"="Participant Directs,\nSmeeble Matches",
+                                                          "InteractionMatch"="Smeeble Directs,\nParticipant Matches"))
+
+#for the dotplot, there are too many participants at ceiling to show the dots - instead I am going 
+#to withhold those dots and add a numerical annotation
+exp3.interaction.success.summary.low$IsPerfect <- ifelse(exp3.interaction.success.summary.low$score==1,1,0)
+exp3.interaction.score.perfect.ns.low <- data.frame(summarize(group_by(subset(exp3.interaction.success.summary.low,IsPerfect==1),Block,Animacy,casemarked,EventType,.drop = FALSE),n()))
+exp3.interaction.score.perfect.ns.low <- plyr::rename(exp3.interaction.score.perfect.ns.low,c("n.."="count"))
+```
+
+
+
+```{r exp3-interaction-success-plot-low}
+
+ggplot(data=exp3.interaction.success.summary.low, aes(x=Block, y=score,
+                                                  colour=Animacy,fill=Animacy)) +
+  facet_grid(EventType~casemarked) +
+  #points and CIs for casemarking by animacy
+  stat_summary(geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min",
+               fun.ymax="max",width=0.3,position=position_dodge(0.9),color='black') + 
+  stat_summary(geom='point', fun.y='mean', position=position_dodge(0.9),size=3) +
+  stat_summary(geom='point', fun.y='mean', position=position_dodge(0.9),size=3,
+               shape=1,colour='black') +
+  
+  
+  #horizontal line showing chance
+  geom_hline(yintercept=0.5,linetype=3) +
+  #by-participant data
+  geom_dotplot(data=subset(exp3.interaction.success.summary.low,IsPerfect==0),aes(x=Block, y=score, shape=Animacy),binaxis = "y", stackdir = "center",alpha=0.5,dotsize=2,position=position_dodge(0.9),binpositions='all',binwidth=1/100) + 
+  geom_text(data=exp3.interaction.score.perfect.ns.low,aes(x=Block,y=1.05,label=count),position=position_dodge(0.9),size=3,colour='black') +
+  
+  #then various axis/legend stuff
+  xlab("") + 
+  theme_bw() + 
+  scale_y_continuous(name="Proportion correct responses",breaks=seq(0,1,0.25)) +
+  theme(legend.title=element_blank()) + 
+  scale_colour_manual(values=my.colours[c(2,3)],breaks=c("FALSE", "TRUE"),labels=c("Inanimate patient", "Animate patient")) + 
+  scale_fill_manual(values=my.colours[c(2,3)],breaks=c("FALSE", "TRUE"),labels=c("Inanimate patient", "Animate patient")) + 
+  ggsave("../Figures/exp3-interaction-success-low.pdf",width=9, height=6)
+```
+```{r exp3-interaction-success-high}
+
+#since there is some data munging here, will set this up as a seperate data frame
+exp3InteractionSuccessDataHigh <- droplevels(subset(exp3Data,((Block=="Interaction" & grammatical) | (Block=="InteractionMatch")) & Day==4 & ProportionMarked=="60% Casemarked"))
+
+exp3.interaction.success.summary.high <- aggregate(score~Block+Animacy+EventType+casemarked+workerId,data=exp3InteractionSuccessDataHigh,FUN=mean)
+
+exp3.interaction.success.summary.high$casemarked <- revalue(as.factor(exp3.interaction.success.summary.high$casemarked),
+                                    c("FALSE"="Patient not casemarked",
+                                      "TRUE"="Patient casemarked"))
+exp3.interaction.success.summary.high$Block <- plyr::revalue(exp3.interaction.success.summary.high$Block,
+                                                        c("Interaction"="Participant Directs,\nSmeeble Matches",
+                                                          "InteractionMatch"="Smeeble Directs,\nParticipant Matches"))
+
+#for the dotplot, there are too many participants at ceiling to show the dots - instead I am going 
+#to withhold those dots and add a numerical annotation
+exp3.interaction.success.summary.high$IsPerfect <- ifelse(exp3.interaction.success.summary.high$score==1,1,0)
+exp3.interaction.score.perfect.ns.high <- data.frame(summarize(group_by(subset(exp3.interaction.success.summary.high,IsPerfect==1),Block,Animacy,casemarked,EventType,.drop = FALSE),n()))
+exp3.interaction.score.perfect.ns.high <- plyr::rename(exp3.interaction.score.perfect.ns.high,c("n.."="count"))
+```
+
+
+
+```{r exp3-interaction-success-plot-high}
+
+ggplot(data=exp3.interaction.success.summary.high, aes(x=Block, y=score,
+                                                  colour=Animacy,fill=Animacy)) +
+  facet_grid(EventType~casemarked) +
+  #points and CIs for casemarking by animacy
+  stat_summary(geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min",
+               fun.ymax="max",width=0.3,position=position_dodge(0.9),color='black') + 
+  stat_summary(geom='point', fun.y='mean', position=position_dodge(0.9),size=3) +
+  stat_summary(geom='point', fun.y='mean', position=position_dodge(0.9),size=3,
+               shape=1,colour='black') +
+  
+  
+  #horizontal line showing chance
+  geom_hline(yintercept=0.5,linetype=3) +
+  #by-participant data
+  geom_dotplot(data=subset(exp3.interaction.success.summary.high,IsPerfect==0),aes(x=Block, y=score, shape=Animacy),binaxis = "y", stackdir = "center",alpha=0.5,dotsize=2,position=position_dodge(0.9),binpositions='all',binwidth=1/100) + 
+  geom_text(data=exp3.interaction.score.perfect.ns.high,aes(x=Block,y=1.05,label=count),position=position_dodge(0.9),size=3,colour='black') +
+  
+  #then various axis/legend stuff
+  xlab("") + 
+  theme_bw() + 
+  scale_y_continuous(name="Proportion correct responses",breaks=seq(0,1,0.25)) +
+  theme(legend.title=element_blank()) + 
+  scale_colour_manual(values=my.colours[c(2,3)],breaks=c("FALSE", "TRUE"),labels=c("Inanimate patient", "Animate patient")) + 
+  scale_fill_manual(values=my.colours[c(2,3)],breaks=c("FALSE", "TRUE"),labels=c("Inanimate patient", "Animate patient")) + 
+  ggsave("../Figures/exp3-interaction-success-high.pdf",width=9, height=6)
+```
+
+## Case marking during interaction
+
+```{r exp3-interaction-data}
+
+#since there is some data munging here, will set this up as a seperate data frame
+exp3RecallVsInteractionData <- subset(exp3Data,(Block=="Interaction" | Block=="SentenceTest1") & grammatical & Day==4)
+#want recall to be the reference level
+exp3RecallVsInteractionData$Block <- relevel(droplevels(exp3RecallVsInteractionData$Block),ref="SentenceTest1")
+
+exp3.recall.vs.interaction.summary <- aggregate(casemarked~Animacy+Block+EventType+ProportionMarked+workerId,data=exp3RecallVsInteractionData,FUN=mean)
+#this is aggregating over animacy
+exp3.recall.vs.interaction.summary.total <- aggregate(casemarked~Block+EventType+ProportionMarked+workerId,data=exp3RecallVsInteractionData,FUN=mean)
+
+#prettier names for printing
+exp3.recall.vs.interaction.summary$Block <- revalue(exp3.recall.vs.interaction.summary$Block,
+                                         c("SentenceTest1"="Recall",
+                                           "Interaction"="Interaction"))
+exp3.recall.vs.interaction.summary.total$Block <- revalue(exp3.recall.vs.interaction.summary.total$Block,
+                                         c("SentenceTest1"="Recall",
+                                           "Interaction"="Interaction"))
+exp3.recall.vs.interaction.summary.total$Animacy <- "All" 
+```
+
+Stats suggest no interaction between ProportionMarked and Block, so plotting this collapsed over those. Note that reference line is 50%.
+
+```{r exp3-interaction-plot}
+
+ggplot(data=exp3.recall.vs.interaction.summary, aes(x=Block, y=casemarked, 
+                                                    colour=Animacy, fill=Animacy)) +
+  facet_grid(EventType~.) +
+  #points and CIs for casemarking by animacy
+  stat_summary(geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min", fun.ymax="max",width=0.3,position=position_dodge(0.9),color='black') + 
+  stat_summary(geom='point', fun.y='mean', position=position_dodge(0.9),size=3) +
+  stat_summary(geom='point', fun.y='mean', position=position_dodge(0.9),size=3,
+               shape=1,colour='black') +
+  
+  #point 95CI for grand means
+  stat_summary(data=exp3.recall.vs.interaction.summary.total,
+                geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min",
+                fun.ymax="max",width=0.15,position=position_dodge(0.9),
+                color='black',show.legend = FALSE) +
+  stat_summary(data=exp3.recall.vs.interaction.summary.total,geom='point', 
+               fun.y='mean', position=position_dodge(0.9),size=3) +
+  stat_summary(data=exp3.recall.vs.interaction.summary.total,geom='point', 
+               fun.y='mean', position=position_dodge(0.9),size=3,
+               shape=1,colour='black') +
+   
+  #horizontal line showing input
+  geom_hline(yintercept=0.5,linetype=3) +
+  #by-participant data
+  geom_dotplot(aes(x=Block, y=casemarked, shape=Animacy),binaxis = "y", stackdir = "center",alpha=0.5,dotsize=1,position=position_dodge(0.9),binpositions='all',binwidth=1/100) + 
+  #then various axis/legend stuff
+  xlab("Block") + 
+  theme_bw() + 
+  ylab("Proportion of case-marked patients") + 
+  theme(legend.title=element_blank()) + 
+  scale_colour_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate patient", "Animate patient")) + 
+  scale_fill_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate patient", "Animate patient")) + 
+  ggsave("../Figures/exp3-interaction-casemarking-collapsed.pdf",width=9, height=6)
+```
+
+And facetted by ProportionMarked additionally.
+
+```{r exp3-interaction-plot-2}
+#Need seperate reference lines here.
+
+
+ggplot(data=exp3.recall.vs.interaction.summary, aes(x=Block, y=casemarked, 
+                                                    colour=Animacy, fill=Animacy)) +
+  facet_grid(EventType~ProportionMarked) +
+  #points and CIs for casemarking by animacy
+  stat_summary(geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min", fun.ymax="max",width=0.3,position=position_dodge(0.9),color='black') + 
+  stat_summary(geom='point', fun.y='mean', position=position_dodge(0.9),size=3) +
+  stat_summary(geom='point', fun.y='mean', position=position_dodge(0.9),size=3,
+               shape=1,colour='black') +
+  
+  #point 95CI for grand means
+  stat_summary(data=exp3.recall.vs.interaction.summary.total,
+                geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min",
+                fun.ymax="max",width=0.15,position=position_dodge(0.9),
+                color='black',show.legend = FALSE) +
+  stat_summary(data=exp3.recall.vs.interaction.summary.total,geom='point', 
+               fun.y='mean', position=position_dodge(0.9),size=3) +
+  stat_summary(data=exp3.recall.vs.interaction.summary.total,geom='point', 
+               fun.y='mean', position=position_dodge(0.9),size=3,
+               shape=1,colour='black') +
+   
+  #horizontal line showing input
+  geom_hline(data=exp3.inputs.2,aes(yintercept=casemarked),linetype=3) +
+  #by-participant data
+  geom_dotplot(aes(x=Block, y=casemarked, shape=Animacy),binaxis = "y", stackdir = "center",alpha=0.5,dotsize=2,position=position_dodge(0.9),binpositions='all',binwidth=1/100) + 
+  #then various axis/legend stuff
+  xlab("Block") + 
+  theme_bw() + 
+  ylab("Proportion of case-marked patients") + 
+  theme(legend.title=element_blank()) + 
+  scale_colour_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate patient", "Animate patient")) + 
+  scale_fill_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate patient", "Animate patient")) + 
+  ggsave("../Figures/exp3-interaction-casemarking.pdf",width=9, height=6)
+```
+
+Stat where Block is treatment-coded - looking for null effects of animacy (i.e. at recall), significant positive effect of Block 9more marking in interaction), significant Block * animacy interaction (DOM emerges). 
+```{r exp3-interaction-stat, cache=TRUE}
+exp3RecallVsInteractionData$Animacy <- factor(exp3RecallVsInteractionData$Animacy)
+contrasts(exp3RecallVsInteractionData$Animacy) <- c(-0.5,0.5)
+contrasts(exp3RecallVsInteractionData$EventType) <- c(-0.5,0.5)
+contrasts(exp3RecallVsInteractionData$ProportionMarked) <- c(-0.5,0.5)
+
+#This is be the full stat
+exp3.recall.vs.interaction.model.1 <- glmer(casemarked ~ Animacy * Block * EventType * ProportionMarked + (1 + Animacy *  Block | workerId),data=exp3RecallVsInteractionData,family=binomial,control=glmerControl(optimizer="bobyqa"))
+
+
+```
+
+Big clear effect of Block and the animacy * Block interaction.
+
+```{r}
+summary(exp3.recall.vs.interaction.model.1)
+```
+

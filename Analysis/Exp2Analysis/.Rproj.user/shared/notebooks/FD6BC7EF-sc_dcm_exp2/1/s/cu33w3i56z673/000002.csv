@@ -1,0 +1,3 @@
+"0","#got this from https://stackoverflow.com/questions/12840294/counting-unique-distinct-values-by-group-in-a-data-frame"
+"0","exp2.counts.table <- plyr::ddply(exp2Data,~Day,summarise,N=length(unique(workerId)))"
+"0","exp2.counts.table"

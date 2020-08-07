@@ -1,0 +1,893 @@
+---
+title: "The role of learning in the emergence of differential case marking systems: an experimental study. Experiment 1."
+author: "Kenny Smith and Jennifer Culbertson"
+date: "20/08/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(plyr)
+library(dplyr)
+library(lme4)
+library(gridExtra) #for the by-participant bar plots
+library(kableExtra)
+library(broom) #for formatting lmer summary tables
+
+#define colours - don't think Jenny likes these, but easy to change! 
+#First one is neutral, e.g. for totals
+my.colours <- c("#808080","#EA7D00","#006DE9")
+```
+
+```{r utility-functions}
+#from https://sebastiansauer.github.io/convert_logit2prob/
+logit2prob <- function(logit){
+  odds <- exp(logit)
+  prob <- odds / (1 + odds)
+  return(prob)
+}
+
+#my inverse function
+prob2logit <- function(prob) {
+  odds <- prob/(1-prob)
+  logodds <- log(odds)
+  return(logodds)
+}
+
+#convenience function for returning estimate given fixed effect name
+get.estimate <- function(model.df,fixed.effect) {
+  model.df[which(model.df$term == fixed.effect), "estimate"]
+}
+
+get.estimate.se <- function(model.df,fixed.effect) {
+  model.df[which(model.df$term == fixed.effect), "std.error"]
+}
+
+my.logodds.p <- function(baseline.proportion,model,predictor) {
+  model.df <- tidy(model)
+  estimate.logodds <- get.estimate(model.df,predictor)
+  estimate.se <- get.estimate.se(model.df,predictor)
+  baseline_logodds <- prob2logit(baseline.proportion)
+  z.score = (estimate.logodds-baseline_logodds)/estimate.se #subtract baseline from coefficient and divide by standard error 
+  p.value = 2*pnorm(-abs(z.score)) #obtain op value from z score
+  return(p.value)
+}
+```
+
+# Introduction
+
+This accompanies latex file XXXX. 
+
+# Experiment 1
+
+##Load the data.
+
+```{r exp1-loaddata}
+#data in two seperate csvs
+exp1DataB <- read.csv('../RawData/evccBRawData.csv')
+exp1DataF <- read.csv('../RawData/evccFRawData.csv')
+
+#remove some columns from F data that don't appear in B
+exp1DataF$condition <- NULL
+exp1DataF$nNouns <- NULL
+
+exp1DataB$AgentsCanBePatients <- 'Agents Can Be Patients'
+exp1DataF$AgentsCanBePatients <- 'Agents Cannot Be Patients'
+exp1Data <- rbind(exp1DataB,exp1DataF)
+
+#binary coding of word order
+exp1Data$isSOV <- ifelse(exp1Data$simplewordorder=='SOV',1,0)
+
+#day needs to be a factor for the stats
+exp1Data$day <- as.factor(exp1Data$day)
+
+#it will be useful to have AgentsCannotBePatients as baseline
+exp1Data$AgentsCanBePatients <- relevel(as.factor(exp1Data$AgentsCanBePatients),
+                                        ref='Agents Cannot Be Patients')
+
+```
+
+##Counts of participants and participant exclusions per day
+
+```{r exp1-counts}
+#got this from https://stackoverflow.com/questions/12840294/counting-unique-distinct-values-by-group-in-a-data-frame
+exp1.counts.table <- ddply(exp1Data,~day,summarise,N=length(unique(workerId)))
+exp1.counts.table
+
+exp1.scores.by.block <- aggregate(score~workerId+day+block,data=exp1Data,FUN=mean)
+exp1.failed.noun.comprehension <- subset(exp1.scores.by.block,block=='NounComprehension2' & score<0.7)
+exp1.failed.sentence.comprehension <- subset(exp1.scores.by.block,block=='SentenceComprehension1' & score<0.7)
+ddply(exp1.failed.sentence.comprehension,~day,summarise,N_excluded=length(unique(workerId)))
+```
+
+##Counts of grammatical/ungrammatical trials
+Including these so we can see how they were calculated - TODO convert to %
+```{r exp1-rejections}
+aggregate(grammatical~day,FUN=mean,data=subset(exp1Data,block=="SentenceTest1"))
+rejection.counts <- ddply(subset(exp1Data,block=="SentenceTest1" & grammatical==0),~wordorder,summarise,N=length(unique(workerId)))
+#ordered list of rejection types
+rejection.counts <- rejection.counts[order(-rejection.counts$N),]
+rejection.counts
+```
+
+##Results
+
+###Identification accuracy on comprehension trials
+
+```{r exp1-identification-accuracy-figure,echo=FALSE}
+
+exp1.score.summary <- aggregate(score~casemarked+patient.is.animate+day+AgentsCanBePatients+workerId,data=subset(exp1Data,block=="SentenceComprehension1"),FUN=mean)
+exp1.score.summary$casemarked <- revalue(as.factor(exp1.score.summary$casemarked),
+                                    c("FALSE"="Patient not casemarked",
+                                      "TRUE"="Patient casemarked"))
+
+
+ggplot(data=exp1.score.summary, aes(x=day, y=score, fill=patient.is.animate)) +
+  #facet by condition and marking
+  facet_grid(AgentsCanBePatients~casemarked) +
+  #bars and CIs for score by animacy
+  stat_summary(geom='bar', fun.y='mean', position=position_dodge(0.9)) +
+  stat_summary(geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min", fun.ymax="max",width=0.3,position=position_dodge(0.9),color='black') + 
+  #horizontal line showing chance
+  geom_hline(yintercept=0.5,linetype=3) + 
+  #by-participant data
+  #dotplot is too busy, use jitered scatterplot
+  geom_dotplot(aes(x=day, y=score, shape=patient.is.animate),binaxis = "y", stackdir = "centerwhole",stackratio=1,alpha=0.2,dotsize=1,position=position_dodge(0.9),fill='black',binpositions='all',binwidth=1/100) +
+  #geom_point(aes(x=day, y=score,shape=patient.is.animate),alpha=0.2,dotsize=1,position=position_jitterdodge(jitter.width= 0.3, jitter.height = 0,dodge.width = 0.9),fill='black') + 
+  #force all points to be circles, and exclude from legend
+  scale_shape_manual(values=c(19,19),guide=FALSE)+
+  #then various axis/legend stuff
+  xlab("Day") + 
+  theme_bw() + 
+  ylab("Proportion correct responses") + 
+  theme(legend.title=element_blank(),legend.position="top") + 
+  scale_fill_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate patient", "Animate patient")) + 
+  ggsave("../Figures/exp1-identification-accuracy.pdf",width=9, height=9)
+```
+
+
+
+```{r exp1-identification-accuracy-stat, cache=TRUE}
+#this takes amazingly long, commenting out for now
+#exp1.score.model.simpler <- glmer(score~casemarked * day * AgentsCanBePatients + (1 | workerId) + (0 + casemarked*day | workerId),data=subset(exp1Data,block=="SentenceComprehension1" & patient.is.animate),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=50000)))
+exp1.score.model.simpler <- glmer(score~casemarked * day * AgentsCanBePatients + (1 | workerId),data=subset(exp1Data,block=="SentenceComprehension1" & patient.is.animate),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=50000)))
+```
+
+```{r}
+summary(exp1.score.model.simpler)
+```
+
+```{r exp1-identification-accuracy-stat-full, cache=TRUE}
+#this takes amazingly long, commenting out for now
+#exp1.score.model.1 <- glmer(score~casemarked * day * AgentsCanBePatients + (1 | workerId) + (0 + casemarked*day | workerId),data=subset(exp1Data,block=="SentenceComprehension1" & patient.is.animate),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=50000)))
+```
+
+```{r}
+#summary(exp1.score.model.1)
+```
+
+This level of performance is roughly what would be expected if participants made optimal use of word order cues to agency (60\% of sentences used SOV order, which would yield an expected log odds of success for an attentive learner of:
+```{r}
+prob2logit(0.6)
+```
+, which is not significantly different from the success rates of our participants:
+```{r}
+my.logodds.p(0.6,exp1.score.model.simpler,"(Intercept)")
+```
+
+###Case marking and animacy during sentence recall
+
+```{r exp1-casemarking-mashaplot}
+exp1.casemarking.summary.by.animacy <- aggregate(casemarked~patient.is.animate+day+AgentsCanBePatients+workerId,data=subset(exp1Data,block=="SentenceTest1" & grammatical),FUN=mean)
+
+
+#this is aggregating over animacy
+exp1.casemarking.summary.total <- aggregate(casemarked~day+AgentsCanBePatients+workerId,data=subset(exp1Data,block=="SentenceTest1" & grammatical),FUN=mean)
+#needs to have this column for plotting compatability with casemarking.summary.by.animacy
+exp1.casemarking.summary.total$patient.is.animate <- "All" 
+
+#a plot with:
+#bars and 95% CIs for mean case marking by animacy
+#dotplot for by-participant means
+#additional point and 95% CI for casemarking collapsing over animacy
+#NB a weird thing about dotplot: unless I repeat the aes and add in a spurious "shape" value, it seems 
+#to collapse the dotplot across animacy values. I don't know why, and I don't know why this solution works.
+ggplot(data=exp1.casemarking.summary.by.animacy, aes(x=day, y=casemarked, fill=patient.is.animate)) +
+  facet_grid(AgentsCanBePatients~.) +
+  #bars and CIs for casemarking by animacy
+  stat_summary(geom='bar', fun.y='mean', position=position_dodge(0.9)) +
+  stat_summary(geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min", fun.ymax="max",width=0.3,position=position_dodge(0.9),color='black') + 
+  #point 95CI for grand means
+  stat_summary(data=exp1.casemarking.summary.total,aes(x=day,y=casemarked),geom='point', fun.y='mean', position=position_dodge(0.9),shape=18,size=4,color='darkgrey',show.legend = FALSE) +
+  stat_summary(data=exp1.casemarking.summary.total,aes(x=day,y=casemarked),geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min", fun.ymax="max",width=0.15,position=position_dodge(0.9),color='darkgrey',show.legend = FALSE) +
+  #horizontal line showing input
+  geom_hline(yintercept=0.6,linetype=3) +
+  #by-participant data
+  geom_dotplot(aes(x=day, y=casemarked, shape=patient.is.animate),binaxis = "y", stackdir = "centerwhole",stackratio=1,alpha=0.2,dotsize=1,position=position_dodge(0.9),fill='black',binpositions='all',binwidth=1/100) +
+  #geom_point(aes(x=day, y=casemarked, shape=patient.is.animate),alpha=0.2,dotsize=1,position=position_jitterdodge(jitter.width= 0.2, jitter.height = 0,dodge.width = 0.9),fill='black') + 
+  #force all points to be circles, and exclude from legend
+  scale_shape_manual(values=c(19,19),guide=FALSE)+
+  #then various axis/legend stuff
+  xlab("Day") + 
+  theme_bw() + 
+  ylab("Proportion of case-marked patients") + 
+  theme(legend.title=element_blank()) + 
+  scale_fill_manual(values=my.colours,breaks=c("FALSE", "TRUE"),labels=c("Inanimate patient", "Animate patient")) +
+  ggsave("../Figures/exp1-casemarking-mashaplot.pdf",width=9, height=9)
+
+```
+
+```{r exp1-casemarking-diffs}
+tmp.animates <- ddply(subset(exp1Data,block=="SentenceTest1" & grammatical & patient.is.animate==TRUE), c("day","workerId","AgentsCanBePatients"), summarise, casemarked.animates = mean(casemarked))
+tmp.inanimates <- ddply(subset(exp1Data,block=="SentenceTest1" & grammatical & patient.is.animate==FALSE), c("day", "workerId","AgentsCanBePatients"), summarise, casemarked.inanimates = mean(casemarked))
+
+tmp <- merge(tmp.animates,tmp.inanimates)
+tmp$diff <- tmp$casemarked.animates-tmp$casemarked.inanimates
+tmp$col <- "negative"                # negative if inanimates are marked more than animates
+tmp[tmp$diff==0,]$col <- "zero"
+tmp[tmp$diff>0,]$col <- "positive"  # positive if animates are marked more than inanimates
+tmp$day <- as.factor(paste("Day=",tmp$day,sep=''))
+
+
+#this is nowhere near as elegant as Jenny's way of doing it, but gives us a single data frame
+#which can be used with facet_grid
+tmp.order <- data.frame(do.call(rbind, 
+                                lapply(levels(droplevels(tmp$day)),function(d) {
+                                  data.frame(do.call(rbind, lapply(levels(droplevels(tmp$AgentsCanBePatients)),function(c) {
+                                  data <- subset(tmp,day==d & AgentsCanBePatients==c)
+                                  data <- data[order(data$diff),]
+                                  data$orderedWorkerId <- 1:nrow(data)
+                                  data})))})))
+#will need these for plotting too
+tmp.means <- aggregate(diff~day*AgentsCanBePatients,FUN=mean,data=tmp)
+tmp.median.positions <- aggregate(diff~day*AgentsCanBePatients,FUN=function(d) {(length(d)+1)/2},data=tmp)
+
+ggplot(tmp.order, aes(x = orderedWorkerId, y = diff, fill = col)) +
+  facet_grid(AgentsCanBePatients~day) +
+    geom_bar(stat = "identity") +
+    geom_hline(data=tmp.means,aes(yintercept=diff),linetype=2) +
+    geom_vline(data=tmp.median.positions,aes(xintercept=diff),linetype=2) +
+    coord_cartesian(ylim=c(-1,1)) +
+    #geom_hline(yintercept=day.mean,linetype=2) +
+    #geom_vline(xintercept=median.line,linetype=2) +
+    scale_fill_manual(values=my.colours[c(2,3,1)]) +
+    theme_bw() +
+    theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank()) +
+    theme(legend.position="none") +
+    scale_x_discrete(breaks = NULL) +
+    labs(y="P(Marked | Animate) - P(Marked | Inanimate)") +
+  ggsave("../Figures/exp1-casemarking-diffs.pdf",width=9, height=9)
+```
+
+```{r exp1-casemarking-stat,cache=TRUE}
+#Using a coding scheme such that the estimate for animacy and condition will be the effect of a one-unit difference - i.e. unlike contr.sum you don't have to double this.
+exp1Data$patient.is.animate.for.stats <- factor(exp1Data$patient.is.animate)
+contrasts(exp1Data$patient.is.animate.for.stats) <- c(-0.5,0.5)
+contrasts(exp1Data$AgentsCanBePatients) <- c(-0.5,0.5)
+exp1.case.marking.model.1 <- glmer(casemarked ~ patient.is.animate.for.stats * day * AgentsCanBePatients + (1 + patient.is.animate.for.stats * day | workerId),data=subset(exp1Data,block=="SentenceTest1" & grammatical),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=50000)))
+```
+
+```{r}
+summary(exp1.case.marking.model.1)
+```
+
+Participants at day 2 produce case marking slightly more often than not --- the odds of producing a case marker are approximately 1.6 to 1, which is not significantly different from the frequency of case marking in the input (where case marking occurs on 60\% of objects, i.e. log odds of:
+
+```{r}
+prob2logit(0.6)
+```
+, n.s. different from the estimated log odds on Day 2,
+```{r}
+my.logodds.p(0.6,exp1.case.marking.model.1,"(Intercept)")
+```
+If I instead run this model on the full data set but setting day 4 as the intercept, there's absolutely no significant effect of animacy, indicating that while the relationship between animacy and case marking changes over the course of the experiment, participants' use of case markers on day 4 does not show a significant DOM-like effect.} 
+Code day 4 as 0 to see if case marking is significantly affected by animacy on day 4
+```{r exp1-casemarking-stat-reversed,cache=TRUE}
+#code day 4 as 0 to see if case marking is significantly affected by animacy on day 4
+exp1Data$dayR <- relevel(exp1Data$day,ref='4')
+
+exp1.case.marking.model.1.r <- glmer(casemarked ~ patient.is.animate.for.stats * dayR * AgentsCanBePatients + (1 + patient.is.animate.for.stats * dayR | workerId),data=subset(exp1Data,block=="SentenceTest1" & grammatical),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=50000)))
+```
+```{r}
+summary(exp1.case.marking.model.1.r)
+```
+
+###Case marking and animacy during interaction
+
+```{r exp1-interaction-data}
+
+#since there is some data munging here, will set this up as a seperate data frame
+exp1RecallVsInteractionData <- subset(exp1Data,(block=="InteractionDirect" | block=="SentenceTest1") & grammatical & day==4)
+#want recall to be the reference level
+exp1RecallVsInteractionData$block <- relevel(droplevels(exp1RecallVsInteractionData$block),ref="SentenceTest1")
+
+exp1.recall.vs.interaction.summary <- aggregate(casemarked~patient.is.animate+block+workerId+AgentsCanBePatients,data=exp1RecallVsInteractionData,FUN=mean)
+#this is aggregating over animacy
+exp1.recall.vs.interaction.summary.total <- aggregate(casemarked~block+AgentsCanBePatients+workerId,data=exp1RecallVsInteractionData,FUN=mean)
+
+#prettier names for printing
+exp1.recall.vs.interaction.summary$block <- revalue(exp1.recall.vs.interaction.summary$block,
+                                         c("SentenceTest1"="Recall",
+                                           "InteractionDirect"="Interaction"))
+exp1.recall.vs.interaction.summary.total$block <- revalue(exp1.recall.vs.interaction.summary.total$block,
+                                         c("SentenceTest1"="Recall",
+                                           "InteractionDirect"="Interaction"))
+exp1.recall.vs.interaction.summary.total$patient.is.animate <- "All" 
+```
+
+
+```{r exp1-interaction-plot}
+
+#a plot with:
+#bars and 95% CIs for mean case marking by animacy
+#dotplot for by-participant means
+#additional point and 95% CI for casemarking collapsing over animacy
+
+ggplot(data=exp1.recall.vs.interaction.summary, aes(x=block, y=casemarked, fill=patient.is.animate)) +
+  facet_grid(.~AgentsCanBePatients) +
+  #bars and CIs for casemarking by animacy
+  stat_summary(geom='bar', fun.y='mean', position=position_dodge(0.9)) +
+  stat_summary(geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min", fun.ymax="max",width=0.3,position=position_dodge(0.9),color='black') + 
+  #point 95CI for grand means
+  stat_summary(data=exp1.recall.vs.interaction.summary.total,aes(x=block,y=casemarked),geom='point', fun.y='mean', position=position_dodge(0.9),shape=18,size=4,color='darkgrey',show.legend = FALSE) +
+   stat_summary(data=exp1.recall.vs.interaction.summary.total,aes(x=block,y=casemarked),geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min", fun.ymax="max",width=0.15,position=position_dodge(0.9),color='darkgrey',show.legend = FALSE) +
+  #horizontal line showing input
+  geom_hline(yintercept=0.6,linetype=3) +
+  #by-participant data
+  geom_dotplot(aes(x=block, y=casemarked, shape=patient.is.animate),binaxis = "y", stackdir = "center",alpha=0.2,dotsize=1,position=position_dodge(0.9),fill='black',binpositions='all',binwidth=1/100) + 
+  #then various axis/legend stuff
+  xlab("Block") + 
+  theme_bw() + 
+  ylab("Proportion of case-marked patients") + 
+  theme(legend.title=element_blank()) + 
+  scale_fill_manual(values=my.colours,breaks=c("FALSE", "TRUE"),labels=c("Inanimate patient", "Animate patient")) + 
+  ggsave("../Figures/exp1-interaction.pdf",width=9, height=6)
+```
+
+
+```{r exp1-interaction-stat}
+exp1RecallVsInteractionData$patient.is.animate.for.stats <- factor(exp1RecallVsInteractionData$patient.is.animate)
+contrasts(exp1RecallVsInteractionData$patient.is.animate.for.stats) <- c(-0.5,0.5)
+contrasts(exp1RecallVsInteractionData$AgentsCanBePatients) <- c(-0.5,0.5)
+#I am going to want to dummy-code this so recall is baseline
+contrasts(exp1RecallVsInteractionData$block) <- NULL
+
+
+exp1.recall.vs.interaction.model.1 <- glmer(casemarked ~ patient.is.animate.for.stats * block * AgentsCanBePatients + (1 + patient.is.animate.for.stats *  block | workerId),data=exp1RecallVsInteractionData,family=binomial,control=glmerControl(optimizer="bobyqa"))
+```
+
+```{r}
+summary(exp1.recall.vs.interaction.model.1)
+```
+
+
+
+###Word order and animacy
+
+```{r exp1-wordorder-mashaplot}
+exp1.sov.summary.by.animacy <- aggregate(isSOV~patient.is.animate+day+AgentsCanBePatients+workerId,data=subset(exp1Data,block=="SentenceTest1" & grammatical),FUN=mean)
+#this is aggregating over animacy
+exp1.sov.summary.total <- aggregate(isSOV~day+AgentsCanBePatients+workerId,data=subset(exp1Data,block=="SentenceTest1" & grammatical),FUN=mean)
+#needs to have this column for plotting compatability with casemarking.summary.by.animacy
+exp1.sov.summary.total$patient.is.animate <- "All" 
+
+ggplot(data=exp1.sov.summary.by.animacy, aes(x=day, y=isSOV, fill=patient.is.animate)) +
+  facet_grid(AgentsCanBePatients~.) +
+  #bars and CIs for word order by animacy
+  stat_summary(geom='bar', fun.y='mean', position=position_dodge(0.9)) +
+  stat_summary(geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min", fun.ymax="max",width=0.3,position=position_dodge(0.9),color='black') + 
+  #point 95CI for grand means
+  stat_summary(data=exp1.sov.summary.total,aes(x=day,y=isSOV),geom='point', fun.y='mean', position=position_dodge(0.9),shape=18,size=4,color='darkgrey',show.legend = FALSE) +
+  stat_summary(data=exp1.sov.summary.total,aes(x=day,y=isSOV),geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min", fun.ymax="max",width=0.15,position=position_dodge(0.9),color='darkgrey',show.legend = FALSE) +
+  #horizontal line showing input
+  geom_hline(yintercept=0.6,linetype=3) +
+  #by-participant data
+  geom_dotplot(aes(x=day, y=isSOV, shape=patient.is.animate),binaxis = "y", stackdir = "center",alpha=0.2,dotsize=1,position=position_dodge(0.9),fill='black',binpositions='all',binwidth=1/100) + 
+  #then various axis/legend stuff
+  xlab("Day") + 
+  theme_bw() + 
+  ylab("Proportion of SOV sentences") + 
+  theme(legend.title=element_blank()) + 
+  scale_fill_manual(values=my.colours,breaks=c("FALSE", "TRUE"),labels=c("Inanimate patient", "Animate patient")) +
+  ggsave("../Figures/exp1-wordorder-mashaplot.pdf",width=9, height=9)
+```
+
+```{r exp1-wordorder-mashaplot-collapsed}
+exp1.sov.summary.by.animacy.collapsed <- aggregate(isSOV~patient.is.animate+day+workerId,data=subset(exp1Data,block=="SentenceTest1" & grammatical),FUN=mean)
+#this is aggregating over animacy
+exp1.sov.summary.total.collapsed <- aggregate(isSOV~day+workerId,data=subset(exp1Data,block=="SentenceTest1" & grammatical),FUN=mean)
+#needs to have this column for plotting compatability with casemarking.summary.by.animacy
+exp1.sov.summary.total.collapsed$patient.is.animate <- "All" 
+
+ggplot(data=exp1.sov.summary.by.animacy.collapsed, aes(x=day, y=isSOV, fill=patient.is.animate)) +
+  #bars and CIs for word order by animacy
+  stat_summary(geom='bar', fun.y='mean', position=position_dodge(0.9)) +
+  stat_summary(geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min", fun.ymax="max",width=0.3,position=position_dodge(0.9),color='black') + 
+  #point 95CI for grand means
+  stat_summary(data=exp1.sov.summary.total.collapsed,aes(x=day,y=isSOV),geom='point', fun.y='mean', position=position_dodge(0.9),shape=18,size=4,color='darkgrey',show.legend = FALSE) +
+  stat_summary(data=exp1.sov.summary.total.collapsed,aes(x=day,y=isSOV),geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min", fun.ymax="max",width=0.15,position=position_dodge(0.9),color='darkgrey',show.legend = FALSE) +
+  #horizontal line showing input
+  geom_hline(yintercept=0.6,linetype=3) +
+  #by-participant data
+  geom_dotplot(aes(x=day, y=isSOV, shape=patient.is.animate),binaxis = "y", stackdir = "center",alpha=0.2,dotsize=1,position=position_dodge(0.9),fill='black',binpositions='all',binwidth=1/100) + 
+  #then various axis/legend stuff
+  xlab("Day") + 
+  theme_bw() + 
+  ylab("Proportion of SOV sentences") + 
+  theme(legend.title=element_blank()) + 
+  scale_fill_manual(values=my.colours,breaks=c("FALSE", "TRUE"),labels=c("Inanimate patient", "Animate patient")) +
+  ggsave("../Figures/exp1-wordorder-mashaplot-collapsed.pdf",width=9, height=6)
+```
+
+```{r exp1-wordorder-stat,cache=TRUE}
+
+exp1.sovorder.model.1 <- glmer(isSOV ~ patient.is.animate.for.stats * AgentsCanBePatients * day + (1 + patient.is.animate.for.stats * day | workerId),data=subset(exp1Data,block=="SentenceTest1" & grammatical),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=50000)))
+```
+
+```{r}
+summary(exp1.sovorder.model.1)
+```
+
+
+The log-odds of producing SOV order are significantly higher than the frequency of SOV in the input:
+
+```{r}
+my.logodds.p(0.6,exp1.sovorder.model.1,"(Intercept)")
+```
+Relevelled model, to test for effect of animacy on word order at day=4? It's still there, which is surprising looking at the graphs, but borne out by the marginal interactions in the original analysis.
+```{r exp1-wordorder-stat-relevel,cache=TRUE}
+
+exp1.sovorder.model.r <- glmer(isSOV ~ patient.is.animate.for.stats * AgentsCanBePatients * dayR + (1 + patient.is.animate.for.stats * dayR | workerId),data=subset(exp1Data,block=="SentenceTest1" & grammatical),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=50000)))
+```
+
+```{r}
+summary(exp1.sovorder.model.r)
+```
+
+
+###Word order and case correlation
+
+Recall that in the input SOV is more likely to be case marked than OSV. Very little suggestion that they learnt this. *Or* that means they are over-producing case-markers with OSV and under-producing with SOV, which is consistent with the effect of animacy on word order.
+
+```{r exp1-wordorder-case-mashaplot}
+exp1.case.summary.by.order <- aggregate(casemarked~day+simplewordorder+workerId+AgentsCanBePatients,data=subset(exp1Data,block=="SentenceTest1" & grammatical),FUN=mean)
+
+#input levels
+exp1.inputs <- data.frame(day=rep(c(1,2,3),2),
+                          simplewordorder=rep(c('OSV','SOV'),each=3),
+                          casemarked=rep(c(1/2,2/3),each=3))
+
+ggplot(data=exp1.case.summary.by.order, aes(x=day, y=casemarked, fill=simplewordorder)) +
+  #bars and CIs for word order by animacy
+  facet_grid(~AgentsCanBePatients) + 
+  stat_summary(geom='bar', fun.y='mean', position=position_dodge(0.9)) +
+  stat_summary(geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min", fun.ymax="max",width=0.3,position=position_dodge(0.9),color='black') + 
+  
+  #horizontal line showing input
+  geom_errorbar(data=exp1.inputs, aes(x=day,ymax=casemarked, ymin=casemarked),position=position_dodge(0.9),linetype=3) +
+  #by-participant data
+  geom_dotplot(aes(x=day, y=casemarked, shape=simplewordorder),binaxis = "y", stackdir = "center",alpha=0.2,dotsize=1,position=position_dodge(0.9),fill='black',binpositions='all',binwidth=1/100) + 
+  #then various axis/legend stuff
+  xlab("Day") + 
+  theme_bw() + 
+  ylab("Proportion of case-marked patients") + 
+  theme(legend.title=element_blank()) + 
+  scale_fill_manual(values=my.colours) + 
+  ggsave("../Figures/exp1-case-by-order-mashaplot.pdf",width=9, height=9)
+
+#same thing collapsing over conditions
+exp1.case.summary.by.order.collapsed <- aggregate(casemarked~day+simplewordorder+workerId,data=subset(exp1Data,block=="SentenceTest1" & grammatical),FUN=mean)
+
+
+ggplot(data=exp1.case.summary.by.order.collapsed, aes(x=day, y=casemarked, fill=simplewordorder)) +
+  #bars and CIs for word order by animacy
+  stat_summary(geom='bar', fun.y='mean', position=position_dodge(0.9)) +
+  stat_summary(geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min", fun.ymax="max",width=0.3,position=position_dodge(0.9),color='black') + 
+  
+  #horizontal line showing input
+  geom_errorbar(data=exp1.inputs, aes(x=day,ymax=casemarked, ymin=casemarked),position=position_dodge(0.9),linetype=3) +
+  #by-participant data
+  geom_dotplot(aes(x=day, y=casemarked, shape=simplewordorder),binaxis = "y", stackdir = "center",alpha=0.2,dotsize=1,position=position_dodge(0.9),fill='black',binpositions='all',binwidth=1/100) + 
+  #then various axis/legend stuff
+  xlab("Day") + 
+  theme_bw() + 
+  ylab("Proportion of case-marked patients") + 
+  theme(legend.title=element_blank()) + 
+  scale_fill_manual(values=my.colours) + 
+  ggsave("../Figures/exp1-case-by-order-collapsed-mashaplot.pdf",width=9, height=6)
+```
+Not clear to me if we want condition in here or not?
+```{r exp1-wordorder-case-stat,cache=TRUE}
+contrasts(exp1Data$simplewordorder) <- c(-0.5,0.5)
+exp1.caseorder.model.1 <- glmer(casemarked ~ simplewordorder * day * AgentsCanBePatients + (1 + simplewordorder * day | workerId),data=subset(exp1Data,block=="SentenceTest1" & grammatical),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=50000)))
+```
+
+```{r}
+summary(exp1.caseorder.model.1)
+```
+
+```{r exp1-wordorder-case-stat-nocondition,cache=TRUE}
+contrasts(exp1Data$simplewordorder) <- c(-0.5,0.5)
+exp1.caseorder.model.2 <- glmer(casemarked ~ simplewordorder * day + (1 + simplewordorder * day | workerId),data=subset(exp1Data,block=="SentenceTest1" & grammatical),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=50000)))
+```
+
+```{r}
+summary(exp1.caseorder.model.2)
+```
+
+###Effects of animacy controlling for word order?
+
+Need to add random slope for word order.
+
+```{r exp1-casemarking-stat-2,cache=TRUE}
+#Using a coding scheme such that the estimate for animacy and condition will be the effect of a one-unit difference - i.e. unlike contr.sum you don't have to double this.
+contrasts(exp1Data$simplewordorder) <- c(-0.5,0.5)
+exp1.case.marking.model.2 <- glmer(casemarked ~ patient.is.animate.for.stats * day * simplewordorder * AgentsCanBePatients + (1 + patient.is.animate.for.stats * day *simplewordorder  | workerId),data=subset(exp1Data,block=="SentenceTest1" & grammatical),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=50000)))
+```
+
+```{r}
+summary(exp1.case.marking.model.2)
+```
+
+Again, not having condition and treatment-coding word order might make life simpler...
+
+```{r exp1-casemarking-stat-3,cache=TRUE}
+#Using a coding scheme such that the estimate for animacy and condition will be the effect of a one-unit difference - i.e. unlike contr.sum you don't have to double this.
+contrasts(exp1Data$simplewordorder) <- NULL
+exp1.case.marking.model.3 <- glmer(casemarked ~ patient.is.animate.for.stats * day * simplewordorder + (1 + patient.is.animate.for.stats * day *simplewordorder  | workerId),data=subset(exp1Data,block=="SentenceTest1" & grammatical),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=50000)))
+```
+
+```{r}
+summary(exp1.case.marking.model.3)
+```
+
+```{r exp1-casemarking-stat-4,cache=TRUE}
+#this is sum-coded
+contrasts(exp1Data$simplewordorder) <- c(-0.5,0.5)
+exp1.case.marking.model.4 <- glmer(casemarked ~ patient.is.animate.for.stats * day * simplewordorder + (1 + patient.is.animate.for.stats * day *simplewordorder  | workerId),data=subset(exp1Data,block=="SentenceTest1" & grammatical),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=50000)))
+```
+
+```{r}
+summary(exp1.case.marking.model.4)
+```
+
+I wonder if we can compare models: is predicting case marking using order or animacy better? Just dropping condition at this point.
+```{r model-comparison,cache=TRUE}
+
+exp1.animacy.only.model <- glmer(casemarked ~ patient.is.animate.for.stats * day + (1  + patient.is.animate.for.stats * day | workerId),data=subset(exp1Data,block=="SentenceTest1" & grammatical),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=50000)))
+
+exp1.order.only.model <- glmer(casemarked ~ simplewordorder * day + (1 + simplewordorder * day | workerId),data=subset(exp1Data,block=="SentenceTest1" & grammatical),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=50000)))
+
+#already run this one
+exp1.order.and.animacy.model <- exp1.case.marking.model.4
+```
+
+```{r}
+anova(exp1.animacy.only.model,exp1.order.only.model)
+anova(exp1.animacy.only.model,exp1.order.only.model,exp1.order.and.animacy.model)
+```
+
+Two big plot of order x case x animacy x condition.
+
+```{r exp1-casemarking-megaplot-day2}
+exp1.casemarking.day2.animacy.order.condition <- aggregate(casemarked~patient.is.animate+simplewordorder + AgentsCanBePatients+workerId,data=subset(exp1Data,block=="SentenceTest1" & grammatical & day==2),FUN=mean)
+
+exp1.casemarking.day2.animacy.order <- aggregate(casemarked~patient.is.animate+simplewordorder + workerId,data=subset(exp1Data,block=="SentenceTest1" & grammatical & day==2),FUN=mean)
+exp1.casemarking.day2.animacy.order$AgentsCanBePatients <- "Both"
+
+exp1.casemarking.day2.animacy.condition <- aggregate(casemarked~patient.is.animate + AgentsCanBePatients+workerId,data=subset(exp1Data,block=="SentenceTest1" & grammatical & day==2),FUN=mean)
+exp1.casemarking.day2.animacy.condition$simplewordorder <- "Both"
+
+exp1.casemarking.day2.order.condition <- aggregate(casemarked~simplewordorder + AgentsCanBePatients+workerId,data=subset(exp1Data,block=="SentenceTest1" & grammatical & day==2),FUN=mean)
+exp1.casemarking.day2.order.condition$patient.is.animate <- "Both"
+
+exp1.casemarking.day2.condition <- aggregate(casemarked~ AgentsCanBePatients+workerId,data=subset(exp1Data,block=="SentenceTest1" & grammatical & day==2),FUN=mean)
+exp1.casemarking.day2.condition$patient.is.animate <- "Both"
+exp1.casemarking.day2.condition$simplewordorder <- "Both"
+
+exp1.casemarking.day2.order <- aggregate(casemarked~simplewordorder +workerId,data=subset(exp1Data,block=="SentenceTest1" & grammatical & day==2),FUN=mean)
+exp1.casemarking.day2.order$patient.is.animate <- "Both"
+exp1.casemarking.day2.order$AgentsCanBePatients <- "Both"
+
+exp1.casemarking.day2.animacy <- aggregate(casemarked~patient.is.animate+workerId,data=subset(exp1Data,block=="SentenceTest1" & grammatical & day==2),FUN=mean)
+exp1.casemarking.day2.animacy$simplewordorder <- "Both"
+exp1.casemarking.day2.animacy$AgentsCanBePatients <- "Both"
+
+exp1.casemarking.day2 <- aggregate(casemarked~workerId,data=subset(exp1Data,block=="SentenceTest1" & grammatical & day==2),FUN=mean)
+exp1.casemarking.day2$patient.is.animate <- "Both"
+exp1.casemarking.day2$simplewordorder <- "Both"
+exp1.casemarking.day2$AgentsCanBePatients <- "Both"
+
+exp1.casemarking.day2.megadata <- rbind(exp1.casemarking.day2,
+                                        exp1.casemarking.day2.animacy,
+                                        exp1.casemarking.day2.order,
+                                        exp1.casemarking.day2.condition,
+                                        exp1.casemarking.day2.animacy.order,
+                                        exp1.casemarking.day2.animacy.condition,
+                                        exp1.casemarking.day2.order.condition,
+                                        exp1.casemarking.day2.animacy.order.condition
+                                        )
+
+
+
+ggplot(data=exp1.casemarking.day2.megadata, aes(x=patient.is.animate, y=casemarked, fill=patient.is.animate)) +
+  facet_grid(AgentsCanBePatients~simplewordorder) +
+  #bars and CIs for casemarking by animacy
+  stat_summary(geom='bar', fun.y='mean', position=position_dodge(0.9)) +
+  stat_summary(geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min", fun.ymax="max",width=0.3,position=position_dodge(0.9),color='black') + 
+  
+  #by-participant data
+  geom_dotplot(aes(x=patient.is.animate, y=casemarked, shape=patient.is.animate),binaxis = "y", stackdir = "centerwhole",stackratio=1,alpha=0.2,dotsize=1,position=position_dodge(0.9),fill='black',binpositions='all',binwidth=1/100) +
+  #geom_point(aes(x=day, y=casemarked, shape=patient.is.animate),alpha=0.2,dotsize=1,position=position_jitterdodge(jitter.width= 0.2, jitter.height = 0,dodge.width = 0.9),fill='black') + 
+  #force all points to be circles, and exclude from legend
+  scale_shape_manual(values=c(19,19,19),guide=FALSE)+
+  #then various axis/legend stuff
+  xlab("Day") + 
+  theme_bw() + 
+  ylab("Proportion of case-marked patients") + 
+  theme(legend.title=element_blank()) + 
+  scale_fill_manual(values=my.colours,breaks=c("FALSE", "TRUE"),labels=c("Inanimate patient", "Animate patient")) +
+  ggsave("../Figures/exp1-casemarking-megaplot-day2.pdf",width=9, height=9)
+
+```
+
+
+```{r exp1-casemarking-megaplot-day4}
+exp1.casemarking.day4.animacy.order.condition <- aggregate(casemarked~patient.is.animate+simplewordorder + AgentsCanBePatients+workerId,data=subset(exp1Data,block=="SentenceTest1" & grammatical & day==4),FUN=mean)
+
+exp1.casemarking.day4.animacy.order <- aggregate(casemarked~patient.is.animate+simplewordorder + workerId,data=subset(exp1Data,block=="SentenceTest1" & grammatical & day==4),FUN=mean)
+exp1.casemarking.day4.animacy.order$AgentsCanBePatients <- "Both"
+
+exp1.casemarking.day4.animacy.condition <- aggregate(casemarked~patient.is.animate + AgentsCanBePatients+workerId,data=subset(exp1Data,block=="SentenceTest1" & grammatical & day==4),FUN=mean)
+exp1.casemarking.day4.animacy.condition$simplewordorder <- "Both"
+
+exp1.casemarking.day4.order.condition <- aggregate(casemarked~simplewordorder + AgentsCanBePatients+workerId,data=subset(exp1Data,block=="SentenceTest1" & grammatical & day==4),FUN=mean)
+exp1.casemarking.day4.order.condition$patient.is.animate <- "Both"
+
+exp1.casemarking.day4.condition <- aggregate(casemarked~ AgentsCanBePatients+workerId,data=subset(exp1Data,block=="SentenceTest1" & grammatical & day==4),FUN=mean)
+exp1.casemarking.day4.condition$patient.is.animate <- "Both"
+exp1.casemarking.day4.condition$simplewordorder <- "Both"
+
+exp1.casemarking.day4.order <- aggregate(casemarked~simplewordorder +workerId,data=subset(exp1Data,block=="SentenceTest1" & grammatical & day==4),FUN=mean)
+exp1.casemarking.day4.order$patient.is.animate <- "Both"
+exp1.casemarking.day4.order$AgentsCanBePatients <- "Both"
+
+exp1.casemarking.day4.animacy <- aggregate(casemarked~patient.is.animate+workerId,data=subset(exp1Data,block=="SentenceTest1" & grammatical & day==4),FUN=mean)
+exp1.casemarking.day4.animacy$simplewordorder <- "Both"
+exp1.casemarking.day4.animacy$AgentsCanBePatients <- "Both"
+
+exp1.casemarking.day4 <- aggregate(casemarked~workerId,data=subset(exp1Data,block=="SentenceTest1" & grammatical & day==4),FUN=mean)
+exp1.casemarking.day4$patient.is.animate <- "Both"
+exp1.casemarking.day4$simplewordorder <- "Both"
+exp1.casemarking.day4$AgentsCanBePatients <- "Both"
+
+exp1.casemarking.day4.megadata <- rbind(exp1.casemarking.day4,
+                                        exp1.casemarking.day4.animacy,
+                                        exp1.casemarking.day4.order,
+                                        exp1.casemarking.day4.condition,
+                                        exp1.casemarking.day4.animacy.order,
+                                        exp1.casemarking.day4.animacy.condition,
+                                        exp1.casemarking.day4.order.condition,
+                                        exp1.casemarking.day4.animacy.order.condition
+                                        )
+
+
+
+ggplot(data=exp1.casemarking.day4.megadata, aes(x=patient.is.animate, y=casemarked, fill=patient.is.animate)) +
+  facet_grid(AgentsCanBePatients~simplewordorder) +
+  #bars and CIs for casemarking by animacy
+  stat_summary(geom='bar', fun.y='mean', position=position_dodge(0.9)) +
+  stat_summary(geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min", fun.ymax="max",width=0.3,position=position_dodge(0.9),color='black') + 
+  
+  #by-participant data
+  geom_dotplot(aes(x=patient.is.animate, y=casemarked, shape=patient.is.animate),binaxis = "y", stackdir = "centerwhole",stackratio=1,alpha=0.2,dotsize=1,position=position_dodge(0.9),fill='black',binpositions='all',binwidth=1/100) +
+  #geom_point(aes(x=day, y=casemarked, shape=patient.is.animate),alpha=0.2,dotsize=1,position=position_jitterdodge(jitter.width= 0.2, jitter.height = 0,dodge.width = 0.9),fill='black') + 
+  #force all points to be circles, and exclude from legend
+  scale_shape_manual(values=c(19,19,19),guide=FALSE)+
+  #then various axis/legend stuff
+  xlab("Day") + 
+  theme_bw() + 
+  ylab("Proportion of case-marked patients") + 
+  theme(legend.title=element_blank()) + 
+  scale_fill_manual(values=my.colours,breaks=c("FALSE", "TRUE"),labels=c("Inanimate patient", "Animate patient")) +
+  ggsave("../Figures/exp1-casemarking-megaplot-day4.pdf",width=9, height=9)
+
+```
+
+Plot of main effect of animacy at day 2.
+```{r}
+ggplot(data=exp1.casemarking.day2.animacy, aes(x=patient.is.animate, y=casemarked, fill=patient.is.animate)) +
+  #bars and CIs for casemarking by animacy
+  stat_summary(geom='bar', fun.y='mean', position=position_dodge(0.9)) +
+  stat_summary(geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min", fun.ymax="max",width=0.3,position=position_dodge(0.9),color='black') + 
+  
+  #by-participant data
+  geom_dotplot(aes(x=patient.is.animate, y=casemarked, shape=patient.is.animate),binaxis = "y", stackdir = "centerwhole",stackratio=1,alpha=0.2,dotsize=1,position=position_dodge(0.9),fill='black',binpositions='all',binwidth=1/100) +
+  #geom_point(aes(x=day, y=casemarked, shape=patient.is.animate),alpha=0.2,dotsize=1,position=position_jitterdodge(jitter.width= 0.2, jitter.height = 0,dodge.width = 0.9),fill='black') + 
+  #force all points to be circles, and exclude from legend
+  scale_shape_manual(values=c(19,19,19),guide=FALSE)+
+  #then various axis/legend stuff
+  xlab("Day") + 
+  theme_bw() + 
+  ylab("Proportion of case-marked patients") + 
+  theme(legend.title=element_blank()) + 
+  scale_fill_manual(values=my.colours,breaks=c("FALSE", "TRUE"),labels=c("Inanimate patient", "Animate patient")) 
+```
+
+Animacy x order interaction at day 2.
+```{r}
+ggplot(data=exp1.casemarking.day2.animacy.order, aes(x=patient.is.animate, y=casemarked, fill=patient.is.animate)) +
+  facet_grid(~simplewordorder) +
+  #bars and CIs for casemarking by animacy
+  stat_summary(geom='bar', fun.y='mean', position=position_dodge(0.9)) +
+  stat_summary(geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min", fun.ymax="max",width=0.3,position=position_dodge(0.9),color='black') + 
+  
+  #by-participant data
+  geom_dotplot(aes(x=patient.is.animate, y=casemarked, shape=patient.is.animate),binaxis = "y", stackdir = "centerwhole",stackratio=1,alpha=0.2,dotsize=1,position=position_dodge(0.9),fill='black',binpositions='all',binwidth=1/100) +
+  #geom_point(aes(x=day, y=casemarked, shape=patient.is.animate),alpha=0.2,dotsize=1,position=position_jitterdodge(jitter.width= 0.2, jitter.height = 0,dodge.width = 0.9),fill='black') + 
+  #force all points to be circles, and exclude from legend
+  scale_shape_manual(values=c(19,19,19),guide=FALSE)+
+  #then various axis/legend stuff
+  theme_bw() + 
+  ylab("Proportion of case-marked patients") + 
+  theme(legend.title=element_blank(),axis.ticks = element_blank(), axis.text.x = element_blank(),axis.title.x= element_blank() ) + 
+  scale_fill_manual(values=my.colours,breaks=c("FALSE", "TRUE"),labels=c("Inanimate patient", "Animate patient")) +
+  ggsave('shira_fig1.pdf')
+```
+
+Condition x order interaction at day 2.
+```{r}
+ggplot(data=exp1.casemarking.day2.order.condition, aes(x=2, y=casemarked, fill=simplewordorder)) +
+  facet_grid(AgentsCanBePatients~simplewordorder) +
+  #bars and CIs for casemarking by animacy
+  stat_summary(geom='bar', fun.y='mean', position=position_dodge(0.9)) +
+  stat_summary(geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min", fun.ymax="max",width=0.3,position=position_dodge(0.9),color='black') + 
+  
+  #by-participant data
+  #geom_dotplot(aes(x=patient.is.animate, y=casemarked, shape=simplewordorder),binaxis = "y", stackdir = "centerwhole",stackratio=1,alpha=0.2,dotsize=1,position=position_dodge(0.9),fill='black',binpositions='all',binwidth=1/100) +
+  #geom_point(aes(x=day, y=casemarked, shape=patient.is.animate),alpha=0.2,dotsize=1,position=position_jitterdodge(jitter.width= 0.2, jitter.height = 0,dodge.width = 0.9),fill='black') + 
+  #force all points to be circles, and exclude from legend
+  scale_shape_manual(values=c(19,19,19),guide=FALSE)+
+  #then various axis/legend stuff
+  xlab("Day") + 
+  theme_bw() + 
+  ylab("Proportion of case-marked patients") + 
+  theme(legend.title=element_blank()) + 
+  scale_fill_manual(values=my.colours) 
+
+```
+
+Animacy x day 4 interaction:
+```{r}
+exp1.casemarking.day2.animacy$day <- '2'
+exp1.casemarking.day4.animacy$day <- '4'
+exp1.casemarking.day2.day4.animcay <- rbind(exp1.casemarking.day2.animacy,exp1.casemarking.day4.animacy)
+ggplot(data=exp1.casemarking.day2.day4.animcay, aes(x=patient.is.animate, y=casemarked, fill=patient.is.animate)) +
+  facet_grid(~day) +
+  #bars and CIs for casemarking by animacy
+  stat_summary(geom='bar', fun.y='mean', position=position_dodge(0.9)) +
+  stat_summary(geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min", fun.ymax="max",width=0.3,position=position_dodge(0.9),color='black') + 
+  
+  #by-participant data
+  #geom_dotplot(aes(x=patient.is.animate, y=casemarked, shape=simplewordorder),binaxis = "y", stackdir = "centerwhole",stackratio=1,alpha=0.2,dotsize=1,position=position_dodge(0.9),fill='black',binpositions='all',binwidth=1/100) +
+  #geom_point(aes(x=day, y=casemarked, shape=patient.is.animate),alpha=0.2,dotsize=1,position=position_jitterdodge(jitter.width= 0.2, jitter.height = 0,dodge.width = 0.9),fill='black') + 
+  #force all points to be circles, and exclude from legend
+  scale_shape_manual(values=c(19,19,19),guide=FALSE)+
+  #then various axis/legend stuff
+  xlab("Day") + 
+  theme_bw() + 
+  ylab("Proportion of case-marked patients") + 
+  theme(legend.title=element_blank()) + 
+  scale_fill_manual(values=my.colours) 
+
+```
+
+Order x day 4 interaction:
+```{r}
+exp1.casemarking.day2.order$day <- '2'
+exp1.casemarking.day4.order$day <- '4'
+exp1.casemarking.day2.day4.order <- rbind(exp1.casemarking.day2.order,exp1.casemarking.day4.order)
+ggplot(data=exp1.casemarking.day2.day4.order, aes(x=simplewordorder, y=casemarked, fill=simplewordorder)) +
+  facet_grid(~day) +
+  #bars and CIs for casemarking by animacy
+  stat_summary(geom='bar', fun.y='mean', position=position_dodge(0.9)) +
+  stat_summary(geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min", fun.ymax="max",width=0.3,position=position_dodge(0.9),color='black') + 
+  
+  #by-participant data
+  #geom_dotplot(aes(x=patient.is.animate, y=casemarked, shape=simplewordorder),binaxis = "y", stackdir = "centerwhole",stackratio=1,alpha=0.2,dotsize=1,position=position_dodge(0.9),fill='black',binpositions='all',binwidth=1/100) +
+  #geom_point(aes(x=day, y=casemarked, shape=patient.is.animate),alpha=0.2,dotsize=1,position=position_jitterdodge(jitter.width= 0.2, jitter.height = 0,dodge.width = 0.9),fill='black') + 
+  #force all points to be circles, and exclude from legend
+  scale_shape_manual(values=c(19,19,19),guide=FALSE)+
+  #then various axis/legend stuff
+  xlab("Day") + 
+  theme_bw() + 
+  ylab("Proportion of case-marked patients") + 
+  theme(legend.title=element_blank()) + 
+  scale_fill_manual(values=my.colours) 
+
+```
+
+Animacy x order x day 4 interaction:
+```{r}
+exp1.casemarking.day2.animacy.order$day <- '2'
+exp1.casemarking.day4.animacy.order$day <- '4'
+exp1.casemarking.day2.day4.animacy.order <- rbind(exp1.casemarking.day2.animacy.order,exp1.casemarking.day4.animacy.order)
+ggplot(data=exp1.casemarking.day2.day4.animacy.order, aes(x=patient.is.animate, y=casemarked, fill=patient.is.animate)) +
+  facet_grid(simplewordorder~day) +
+  #bars and CIs for casemarking by animacy
+  stat_summary(geom='bar', fun.y='mean', position=position_dodge(0.9)) +
+  stat_summary(geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min", fun.ymax="max",width=0.3,position=position_dodge(0.9),color='black') + 
+  
+  #by-participant data
+  #geom_dotplot(aes(x=patient.is.animate, y=casemarked, shape=simplewordorder),binaxis = "y", stackdir = "centerwhole",stackratio=1,alpha=0.2,dotsize=1,position=position_dodge(0.9),fill='black',binpositions='all',binwidth=1/100) +
+  #geom_point(aes(x=day, y=casemarked, shape=patient.is.animate),alpha=0.2,dotsize=1,position=position_jitterdodge(jitter.width= 0.2, jitter.height = 0,dodge.width = 0.9),fill='black') + 
+  #force all points to be circles, and exclude from legend
+  scale_shape_manual(values=c(19,19,19),guide=FALSE)+
+  #then various axis/legend stuff
+  theme_bw() + 
+  ylab("Proportion of case-marked patients") + 
+  theme(legend.title=element_blank()) + 
+  scale_fill_manual(values=my.colours)+
+  theme(legend.title=element_blank(),axis.ticks = element_blank(), axis.text.x = element_blank(),axis.title.x= element_blank() ) + 
+  ggsave('shira_fig2.pdf')
+
+```
+
+Condition x order x day 4 interaction: Agents Cannot Be Patients condition shows more of a change in the effect of word order on case marking over days.
+```{r}
+exp1.casemarking.day2.order.condition$day <- '2'
+exp1.casemarking.day4.order.condition$day <- '4'
+exp1.casemarking.day2.day4.order.condition <- rbind(exp1.casemarking.day2.order.condition,exp1.casemarking.day4.order.condition)
+ggplot(data=exp1.casemarking.day2.day4.order.condition, aes(x=simplewordorder, y=casemarked, fill=simplewordorder)) +
+  facet_grid(AgentsCanBePatients~day) +
+  #bars and CIs for casemarking by animacy
+  stat_summary(geom='bar', fun.y='mean', position=position_dodge(0.9)) +
+  stat_summary(geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min", fun.ymax="max",width=0.3,position=position_dodge(0.9),color='black') + 
+  
+  #by-participant data
+  #geom_dotplot(aes(x=patient.is.animate, y=casemarked, shape=simplewordorder),binaxis = "y", stackdir = "centerwhole",stackratio=1,alpha=0.2,dotsize=1,position=position_dodge(0.9),fill='black',binpositions='all',binwidth=1/100) +
+  #geom_point(aes(x=day, y=casemarked, shape=patient.is.animate),alpha=0.2,dotsize=1,position=position_jitterdodge(jitter.width= 0.2, jitter.height = 0,dodge.width = 0.9),fill='black') + 
+  #force all points to be circles, and exclude from legend
+  scale_shape_manual(values=c(19,19,19),guide=FALSE)+
+  #then various axis/legend stuff
+  xlab("Day") + 
+  theme_bw() + 
+  ylab("Proportion of case-marked patients") + 
+  theme(legend.title=element_blank()) + 
+  scale_fill_manual(values=my.colours) 
+
+```
+
+Animacy x condition x order x day 4 interaction: effect seems to mainly be driven by OSV order in Agents Cannot be Patients condition, and SOV order in Agents Can Be Patients condition. 
+```{r}
+exp1.casemarking.day2.animacy.order.condition$day <- '2'
+exp1.casemarking.day4.animacy.order.condition$day <- '4'
+
+exp1.casemarking.day2.day4.animacy.order.condition <- rbind(exp1.casemarking.day2.animacy.order.condition,
+                                                            exp1.casemarking.day4.animacy.order.condition)
+exp1.casemarking.day2.day4.animacy.order.condition$day_simplewordorder <- paste(exp1.casemarking.day2.day4.animacy.order.condition$simplewordorder,exp1.casemarking.day2.day4.animacy.order.condition$day, 
+                                                                                sep=', day=')
+
+ggplot(data=exp1.casemarking.day2.day4.animacy.order.condition, 
+       aes(x=patient.is.animate, y=casemarked, fill=patient.is.animate)) +
+  facet_grid(AgentsCanBePatients~day_simplewordorder) +
+  #bars and CIs for casemarking by animacy
+  stat_summary(geom='bar', fun.y='mean', position=position_dodge(0.9)) +
+  stat_summary(geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min", fun.ymax="max",width=0.3,position=position_dodge(0.9),color='black') + 
+  
+  #by-participant data
+  #geom_dotplot(aes(x=patient.is.animate, y=casemarked, shape=simplewordorder),binaxis = "y", stackdir = "centerwhole",stackratio=1,alpha=0.2,dotsize=1,position=position_dodge(0.9),fill='black',binpositions='all',binwidth=1/100) +
+  #geom_point(aes(x=day, y=casemarked, shape=patient.is.animate),alpha=0.2,dotsize=1,position=position_jitterdodge(jitter.width= 0.2, jitter.height = 0,dodge.width = 0.9),fill='black') + 
+  #force all points to be circles, and exclude from legend
+  scale_shape_manual(values=c(19,19,19),guide=FALSE)+
+  #then various axis/legend stuff
+  xlab("Day") + 
+  theme_bw() + 
+  ylab("Proportion of case-marked patients") + 
+  theme(legend.title=element_blank()) + 
+  scale_fill_manual(values=my.colours) 
+
+```

@@ -1,0 +1,1 @@
+"0","aggregate(grammatical~Day,FUN=mean,data=subset(exp1Data,Block==""SentenceTest1""))"

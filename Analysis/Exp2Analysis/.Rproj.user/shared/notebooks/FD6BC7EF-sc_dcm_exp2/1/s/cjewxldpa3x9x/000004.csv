@@ -1,0 +1,4 @@
+"0","rejection.counts <- ddply(subset(exp2Data,Block==""SentenceTest1"" & grammatical==0),~wordorder,summarise,N=length(unique(workerId)))"
+"0","#ordered list of rejection types"
+"0","rejection.counts <- rejection.counts[order(-rejection.counts$N),]"
+"0","rejection.counts"
