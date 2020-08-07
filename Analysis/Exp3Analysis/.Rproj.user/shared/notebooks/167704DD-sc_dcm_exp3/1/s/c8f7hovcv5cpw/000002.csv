@@ -1,2 +1,0 @@
-"0","exp3Data$ProportionMarked <- relevel(as.factor(exp3Data$ProportionMarked),ref=""40% Casemarked"")"
-"0","contrasts(exp3Data$ProportionMarked) <- c(-0.5,0.5)"

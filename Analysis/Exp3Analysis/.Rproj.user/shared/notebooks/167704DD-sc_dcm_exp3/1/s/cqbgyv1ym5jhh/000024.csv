@@ -1,1 +1,0 @@
-"0","ddply(exp3.failed.sentence.comprehension,~Day,summarise,N_excluded=length(unique(workerId)))"

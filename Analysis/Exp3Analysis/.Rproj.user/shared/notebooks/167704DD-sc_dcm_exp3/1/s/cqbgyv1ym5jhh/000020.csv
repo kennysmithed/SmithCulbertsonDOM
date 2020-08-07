@@ -1,2 +1,0 @@
-"0","exp3.counts.table3 <- ddply(exp3Data,~Day,summarise,N=length(unique(workerId)))"
-"0","exp3.counts.table3"

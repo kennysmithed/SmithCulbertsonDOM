@@ -82,8 +82,8 @@ Using text annotations for people at ceiling, but note that has a slightly weird
 
 exp2.score.summary <- aggregate(score~casemarked+Animacy+Day+EventType+workerId,data=subset(exp2Data,Block=="SentenceComprehension1"),FUN=mean)
 exp2.score.summary$casemarked <- revalue(as.factor(exp2.score.summary$casemarked),
-                                    c("FALSE"="Patient not casemarked",
-                                      "TRUE"="Patient casemarked"))
+                                    c("FALSE"="Object not casemarked",
+                                      "TRUE"="Object casemarked"))
 
 #for the dotplot, there are too many participants at ceiling to show the dots - instead I am going 
 #to withhold those dots and add a numerical annotation
@@ -122,8 +122,8 @@ ggplot(data=exp2.score.summary, aes(x=Day, y=score, fill=Animacy,colour=Animacy)
   #ylab("Proportion correct responses") + 
   scale_y_continuous(name="Proportion correct responses",breaks=seq(0,1,0.25)) +
   theme(legend.title=element_blank(),legend.position="top") + 
-  scale_fill_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate patient", "Animate patient")) + 
-  scale_colour_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate patient", "Animate patient")) +
+  scale_fill_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate object", "Animate object")) + 
+  scale_colour_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate object", "Animate object")) +
   ggsave("../Figures/exp2-identification-accuracy.pdf",width=9, height=9)
 
 ```
@@ -177,7 +177,7 @@ my.logodds.p(0.6,exp2.score.model.3.recode,"(Intercept)")
 
 ## Word order and animacy
 
-Want to check for effect we see in Exp 1, namely higher use of OSV with animate patients.
+Want to check for effect we see in Exp 1, namely higher use of OSV with animate objects.
 
 ```{r exp2-wordorder-collapsed}
 exp2.sov.summary.by.animacy.collapsed <- aggregate(isSOV~Animacy+Day+workerId,data=subset(exp2Data,Block=="SentenceTest1" & grammatical),FUN=mean)
@@ -222,8 +222,8 @@ ggplot(data=exp2.sov.summary.by.animacy.collapsed, aes(x=Day, y=isSOV, fill=Anim
   theme_bw() + 
   ylab("Proportion of SOV sentences") + 
   theme(legend.title=element_blank()) + 
-  scale_colour_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate patient", "Animate patient")) +
-  scale_fill_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate patient", "Animate patient")) +
+  scale_colour_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) +
+  scale_fill_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) +
   ggsave("../Figures/exp2-wordorder-collapsed.pdf",width=9, height=4.5)
 ```
 
@@ -290,7 +290,7 @@ ggplot(data=exp2.case.summary.by.order.collapsed, aes(x=Day, y=casemarked, fill=
   #then various axis/legend stuff
   xlab("Day") + 
   theme_bw() + 
-  ylab("Proportion of case-marked patients") + 
+  ylab("Proportion of case-marked objects") + 
   theme(legend.title=element_blank()) + 
   scale_fill_manual(values=my.colours) + 
   scale_colour_manual(values=my.colours) + 
@@ -345,10 +345,10 @@ ggplot(data=exp2.casemarking.summary.by.animacy, aes(x=Day, y=casemarked,
   #then various axis/legend stuff
   xlab("Day") + 
   theme_bw() + 
-  ylab("Proportion of case-marked patients") + 
+  ylab("Proportion of case-marked objects") + 
   theme(legend.title=element_blank()) + 
-  scale_fill_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate patient", "Animate patient")) +
-  scale_colour_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate patient", "Animate patient")) +
+  scale_fill_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) +
+  scale_colour_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) +
   ggsave("../Figures/exp2-casemarking.pdf",width=9, height=9)
 
 ```
@@ -464,8 +464,8 @@ exp2InteractionSuccessData <- droplevels(subset(exp2Data,((Block=="Interaction" 
 exp2.interaction.success.summary <- aggregate(score~Block+Animacy+EventType+casemarked+workerId,data=exp2InteractionSuccessData,FUN=mean)
 
 exp2.interaction.success.summary$casemarked <- revalue(as.factor(exp2.interaction.success.summary$casemarked),
-                                    c("FALSE"="Patient not casemarked",
-                                      "TRUE"="Patient casemarked"))
+                                    c("FALSE"="Object not casemarked",
+                                      "TRUE"="Object casemarked"))
 exp2.interaction.success.summary$Block <- plyr::revalue(exp2.interaction.success.summary$Block,
                                                         c("Interaction"="Participant Directs,\nSmeeble Matches",
                                                           "InteractionMatch"="Smeeble Directs,\nParticipant Matches"))
@@ -501,8 +501,8 @@ ggplot(data=exp2.interaction.success.summary, aes(x=Block, y=score,
   theme_bw() + 
   scale_y_continuous(name="Proportion correct responses",breaks=seq(0,1,0.25)) +
   theme(legend.title=element_blank()) + 
-  scale_colour_manual(values=my.colours[c(2,3)],breaks=c("FALSE", "TRUE"),labels=c("Inanimate patient", "Animate patient")) + 
-  scale_fill_manual(values=my.colours[c(2,3)],breaks=c("FALSE", "TRUE"),labels=c("Inanimate patient", "Animate patient")) + 
+  scale_colour_manual(values=my.colours[c(2,3)],breaks=c("FALSE", "TRUE"),labels=c("Inanimate object", "Animate object")) + 
+  scale_fill_manual(values=my.colours[c(2,3)],breaks=c("FALSE", "TRUE"),labels=c("Inanimate object", "Animate object")) + 
   ggsave("../Figures/exp2-interaction-success.pdf",width=9, height=6)
 ```
 
@@ -562,10 +562,10 @@ ggplot(data=exp2.recall.vs.interaction.summary, aes(x=Block, y=casemarked,
   #then various axis/legend stuff
   xlab("Block") + 
   theme_bw() + 
-  ylab("Proportion of case-marked patients") + 
+  ylab("Proportion of case-marked objects") + 
   theme(legend.title=element_blank()) + 
-  scale_colour_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate patient", "Animate patient")) + 
-  scale_fill_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate patient", "Animate patient")) + 
+  scale_colour_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) + 
+  scale_fill_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) + 
   ggsave("../Figures/exp2-interaction-casemarking.pdf",width=9, height=6)
 ```
 

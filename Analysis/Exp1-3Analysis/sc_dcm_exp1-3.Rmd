@@ -81,7 +81,7 @@ ddply(exp1.to.3.failed.sentence.comprehension,~Day,summarise,N_excluded=length(u
 
 # Word order and animacy
 
-Want to check for more frequent use of SOV with inanimate patients (= higher use of OSV with animate patients). 
+Want to check for more frequent use of SOV with inanimate objects (= higher use of OSV with animate objects). 
 
 
 ```{r wordorder-collapsed}
@@ -128,8 +128,8 @@ ggplot(data=exp1.to.3.sov.summary.by.animacy.collapsed, aes(x=Day, y=isSOV, fill
   theme_bw() + 
   ylab("Proportion of SOV sentences") + 
   theme(legend.title=element_blank()) + 
-  scale_colour_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate patient", "Animate patient")) +
-  scale_fill_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate patient", "Animate patient")) +
+  scale_colour_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) +
+  scale_fill_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) +
   ggsave("../Figures/exp1to3-wordorder-collapsed.pdf",width=9, height=9)
 ```
 
@@ -206,10 +206,10 @@ ggplot(data=exp1.to.3.casemarking.summary.by.animacy, aes(x=Day, y=casemarked,
   #then various axis/legend stuff
   xlab("Day") + 
   theme_bw() + 
-  ylab("Proportion of case-marked patients") + 
+  ylab("Proportion of case-marked objects") + 
   theme(legend.title=element_blank()) + 
-  scale_fill_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate patient", "Animate patient")) +
-  scale_colour_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate patient", "Animate patient")) +
+  scale_fill_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) +
+  scale_colour_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) +
   ggsave("../Figures/exp1to3-casemarking.pdf",width=9, height=6)
 
 ```
@@ -322,10 +322,10 @@ ggplot(data=exp1.to.3.recall.vs.interaction.summary, aes(x=Block, y=casemarked,
   #then various axis/legend stuff
   xlab("Block") + 
   theme_bw() + 
-  ylab("Proportion of case-marked patients") + 
+  ylab("Proportion of case-marked objects") + 
   theme(legend.title=element_blank()) + 
-  scale_colour_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate patient", "Animate patient")) + 
-  scale_fill_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate patient", "Animate patient")) + 
+  scale_colour_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) + 
+  scale_fill_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) + 
   ggsave("../Figures/exp1to3-interaction-casemarking.pdf",width=9, height=6)
 ```
 
@@ -376,10 +376,10 @@ ggplot(data=exp1.to.3.recall.vs.interaction.summary.collapsed, aes(x=Block, y=ca
   #then various axis/legend stuff
   xlab("Block") + 
   theme_bw() + 
-  ylab("Proportion of case-marked patients") + 
+  ylab("Proportion of case-marked objects") + 
   theme(legend.title=element_blank()) + 
-  scale_colour_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate patient", "Animate patient")) + 
-  scale_fill_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate patient", "Animate patient")) + 
+  scale_colour_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) + 
+  scale_fill_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) + 
   ggsave("../Figures/exp1to3-interaction-casemarking-collapsed.pdf",width=9, height=6)
 ```
 
@@ -416,9 +416,9 @@ ggplot(exp1.to.3interaction.direct.data,aes(x=trialNumber,y=casemarked,colour=An
   #then various axis/legend stuff
   xlab("Trial number") + 
   theme_bw() + 
-  ylab("Proportion of case-marked patients") + 
+  ylab("Proportion of case-marked objects") + 
   theme(legend.title=element_blank()) + 
-  scale_colour_manual(values=my.colours[c(2:3)],breaks=c("FALSE", "TRUE"),labels=c("Inanimate patient", "Animate patient")) 
+  scale_colour_manual(values=my.colours[c(2:3)],breaks=c("FALSE", "TRUE"),labels=c("Inanimate object", "Animate object")) 
   
 ```
 
@@ -433,9 +433,9 @@ ggplot(exp1.to.3interaction.direct.data,aes(x=trialNumberBinned,y=casemarked,col
   #then various axis/legend stuff
   xlab("Trial number") + 
   theme_bw() + 
-  ylab("Proportion of case-marked patients") + 
+  ylab("Proportion of case-marked objects") + 
   theme(legend.title=element_blank()) + 
-  scale_colour_manual(values=my.colours[c(2:3)],breaks=c("FALSE", "TRUE"),labels=c("Inanimate patient", "Animate patient")) +
+  scale_colour_manual(values=my.colours[c(2:3)],breaks=c("FALSE", "TRUE"),labels=c("Inanimate object", "Animate object")) +
   scale_x_continuous(breaks=0:7,labels=c("1-5","6-10","11-15","16-20","21-25","26-30","30-35","36-40")) +
   ggsave("../Figures/exp1to3-interaction-timecourse.pdf",width=9, height=6)
 
@@ -464,7 +464,7 @@ Do participants who vary word order more (i.e. word order is less informative ab
 
 Measure of word order variability: entropy.
 
-Measure of DOM: % marked animate patients - % marked inanimate patients
+Measure of DOM: % marked animate objects - % marked inanimate objects
 
 Will look at day 4 and contrast recall and interaction.
 ```{r}
@@ -480,7 +480,7 @@ exp1.to.3.proportion.sov$Entropy <- mapply(function(p) ifelse(p==0|p==1,0,(-p*lo
                                            exp1.to.3.proportion.sov$isSOV)       
 
 #OK, for DOM score can use existing exp1.to.3.recall.vs.interaction.summary as basis
-#but need to calculate diffs - easiest way is to make 2 columns giving % casemarked for animate and inanimate patients
+#but need to calculate diffs - easiest way is to make 2 columns giving % casemarked for animate and inanimate objects
 exp1.to.3.domscore <- tidyr::spread(exp1.to.3.recall.vs.interaction.summary,Animacy,casemarked)
 exp1.to.3.domscore$DOM <- exp1.to.3.domscore$'TRUE' - exp1.to.3.domscore$'FALSE'
 exp1.to.3.domscore$'FALSE' <- NULL
@@ -516,7 +516,7 @@ Do participants who vary word order more (i.e. word order is less informative ab
 
 Measure of word order variability: entropy.
 
-Measure of casemarking: % marked patients.
+Measure of casemarking: % marked objects.
 
 Will look at day 4 and contrast recall and interaction.
 ```{r}

@@ -77,8 +77,8 @@ rejection.counts <- rejection.counts[order(-rejection.counts$N),]
 
 exp1.score.summary <- aggregate(score~casemarked+Animacy+Day+EventType+workerId,data=subset(exp1Data,Block=="SentenceComprehension1"),FUN=mean)
 exp1.score.summary$casemarked <- revalue(as.factor(exp1.score.summary$casemarked),
-                                    c("FALSE"="Patient not casemarked",
-                                      "TRUE"="Patient casemarked"))
+                                    c("FALSE"="Object not casemarked",
+                                      "TRUE"="Object casemarked"))
 
 #for the dotplot, there are too many participants at ceiling to show the dots - instead I am going 
 #to withhold those dots and add a numerical annotation
@@ -120,8 +120,8 @@ ggplot(data=exp1.score.summary, aes(x=Day, y=score, fill=Animacy,colour=Animacy)
   #ylab("Proportion correct responses") + 
   scale_y_continuous(name="Proportion correct responses",breaks=seq(0,1,0.25)) +
   theme(legend.title=element_blank(),legend.position="top") + 
-  scale_fill_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate patient", "Animate patient")) + 
-  scale_colour_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate patient", "Animate patient")) +
+  scale_fill_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate object", "Animate object")) + 
+  scale_colour_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate object", "Animate object")) +
   ggsave("../Figures/exp1-identification-accuracy.pdf",width=9, height=9)
 ```
 
@@ -201,10 +201,10 @@ ggplot(data=exp1.casemarking.summary.by.animacy, aes(x=Day, y=casemarked,
   #then various axis/legend stuff
   xlab("Day") + 
   theme_bw() + 
-  ylab("Proportion of case-marked patients") + 
+  ylab("Proportion of case-marked objects") + 
   theme(legend.title=element_blank()) + 
-  scale_fill_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate patient", "Animate patient")) +
-  scale_colour_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate patient", "Animate patient")) +
+  scale_fill_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) +
+  scale_colour_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) +
   ggsave("../Figures/exp1-casemarking.pdf",width=9, height=9)
 
 ```
@@ -257,8 +257,8 @@ exp1InteractionSuccessData$Animacy <- as.factor(exp1InteractionSuccessData$Anima
 exp1.interaction.success.summary <- aggregate(score~Block+Animacy+EventType+casemarked+workerId,data=exp1InteractionSuccessData,FUN=mean)
 
 exp1.interaction.success.summary$casemarked <- revalue(as.factor(exp1.interaction.success.summary$casemarked),
-                                    c("FALSE"="Patient not casemarked",
-                                      "TRUE"="Patient casemarked"))
+                                    c("FALSE"="Object not casemarked",
+                                      "TRUE"="Object casemarked"))
 exp1.interaction.success.summary$Block <- plyr::revalue(exp1.interaction.success.summary$Block,
                                                         c("Interaction"="Participant Directs,\nSmeeble Matches",
                                                           "InteractionMatch"="Smeeble Directs,\nParticipant Matches"))
@@ -294,12 +294,12 @@ ggplot(data=exp1.interaction.success.summary, aes(x=Block, y=score,
   theme_bw() + 
   scale_y_continuous(name="Proportion correct responses",breaks=seq(0,1,0.25)) +
   theme(legend.title=element_blank()) + 
-  scale_colour_manual(values=my.colours[c(2,3)],breaks=c("FALSE", "TRUE"),labels=c("Inanimate patient", "Animate patient")) + 
-  scale_fill_manual(values=my.colours[c(2,3)],breaks=c("FALSE", "TRUE"),labels=c("Inanimate patient", "Animate patient")) + 
+  scale_colour_manual(values=my.colours[c(2,3)],breaks=c("FALSE", "TRUE"),labels=c("Inanimate object", "Animate object")) + 
+  scale_fill_manual(values=my.colours[c(2,3)],breaks=c("FALSE", "TRUE"),labels=c("Inanimate object", "Animate object")) + 
   ggsave("../Figures/exp1-interaction-success.pdf",width=9, height=6)
 ```
 
-Stats-wise, do we see the difference in success rates reflecting participants' exploitation of the event structure in the Subjects Cannot Be Objects condition? Dummy-coding block and casemarking so I can see participant-directs, Subjects Cannot Be Objects as the intercept, and running the analysis only on trials where the patient is animate and the noun is not casemarked.
+Stats-wise, do we see the difference in success rates reflecting participants' exploitation of the event structure in the Subjects Cannot Be Objects condition? Dummy-coding block and casemarking so I can see participant-directs, Subjects Cannot Be Objects as the intercept, and running the analysis only on trials where the object is animate and the noun is not casemarked.
 
 ```{r exp1-interaction-success-stat-1, cache=TRUE}
 #I am going to want to dummy-code this so Subjects Cannot Be Objects is baseline
@@ -376,10 +376,10 @@ ggplot(data=exp1.recall.vs.interaction.summary, aes(x=Block, y=casemarked,
   #then various axis/legend stuff
   xlab("Block") + 
   theme_bw() + 
-  ylab("Proportion of case-marked patients") + 
+  ylab("Proportion of case-marked objects") + 
   theme(legend.title=element_blank()) + 
-  scale_colour_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate patient", "Animate patient")) + 
-  scale_fill_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate patient", "Animate patient")) + 
+  scale_colour_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) + 
+  scale_fill_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) + 
   ggsave("../Figures/exp1-interaction-casemarking.pdf",width=9, height=6)
 ```
 
@@ -435,8 +435,8 @@ ggplot(data=exp1.sov.summary.by.animacy, aes(x=Day, y=isSOV, fill=Animacy, colou
   theme_bw() + 
   ylab("Proportion of SOV sentences") + 
   theme(legend.title=element_blank()) + 
-  scale_colour_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate patient", "Animate patient")) +
-  scale_fill_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate patient", "Animate patient")) +
+  scale_colour_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) +
+  scale_fill_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) +
   ggsave("../Figures/exp1-wordorder.pdf",width=9, height=9)
 ```
 
@@ -485,8 +485,8 @@ ggplot(data=exp1.sov.summary.by.animacy.collapsed, aes(x=Day, y=isSOV, fill=Anim
   theme_bw() + 
   ylab("Proportion of SOV sentences") + 
   theme(legend.title=element_blank()) + 
-  scale_colour_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate patient", "Animate patient")) +
-  scale_fill_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate patient", "Animate patient")) +
+  scale_colour_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) +
+  scale_fill_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) +
   ggsave("../Figures/exp1-wordorder-collapsed.pdf",width=9, height=4.5)
 ```
 
@@ -557,7 +557,7 @@ ggplot(data=exp1.case.summary.by.order.collapsed, aes(x=Day, y=casemarked, fill=
   #then various axis/legend stuff
   xlab("Day") + 
   theme_bw() + 
-  ylab("Proportion of case-marked patients") + 
+  ylab("Proportion of case-marked objects") + 
   theme(legend.title=element_blank()) + 
   scale_fill_manual(values=my.colours) + 
   scale_colour_manual(values=my.colours) + 
