@@ -1,7 +1,7 @@
 ---
 title: "Experiments 1-3 combined"
 author: "Kenny Smith and Jennifer Culbertson"
-date: "25/11/2019"
+date: "09/08/2020"
 output: html_document
 ---
 
@@ -17,7 +17,7 @@ library(stargazer)
 #load utility functions
 source('../_Utilities.R')
 
-#define colours - don't think Jenny likes these, but easy to change! 
+#define colours
 #First one is neutral, e.g. for totals
 my.colours <- c("#808080","#EA7D00","#006DE9")
 ```
@@ -25,7 +25,7 @@ my.colours <- c("#808080","#EA7D00","#006DE9")
 
 # Introduction
 
-This accompanies latex file XXXX. 
+Combined analysis of Experiments 1-3. 
 
 
 # Load the data.
