@@ -604,11 +604,13 @@ ggplot(data=exp3.casemarking.summary.by.animacy, aes(x=Day, y=casemarked,
 ```{r}
 exp3Data$Animacy <- factor(exp3Data$Animacy)
 contrasts(exp3Data$Animacy) <- c(-0.5,0.5)
+contrasts(exp3Data$EventType) <- c(-0.5,0.5)
+contrasts(exp3Data$ProportionMarked) <- c(-0.5,0.5)
 ```
 
 ```{r exp3-casemarking-stat-1,cache=TRUE}
 #This is the stat for the full manipulation
-contrasts(exp3Data$EventType) <- c(-0.5,0.5)
+
 exp3.case.marking.model.1 <- glmer(casemarked ~ Animacy * EventType * ProportionMarked * Day + (1 + Animacy * Day | workerId),data=subset(exp3Data,Block=="SentenceTest1" & grammatical),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=50000)))
 
 ```
