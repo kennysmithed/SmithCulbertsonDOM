@@ -520,7 +520,7 @@ ggplot(data=exp2.recall.vs.interaction.summary, aes(x=Block, y=casemarked,
   #horizontal line showing input
   geom_hline(yintercept=0.4,linetype=3) +
   #by-participant data
-  geom_dotplot(aes(x=Block, y=casemarked, shape=Animacy),binaxis = "y", stackdir = "center",alpha=0.5,dotsize=1,position=position_dodge(0.9),binpositions='all',binwidth=1/100) + 
+  geom_dotplot(aes(x=Block, y=casemarked, shape=Animacy),binaxis = "y", stackdir = "center",alpha=0.5,dotsize=2,position=position_dodge(0.9),binpositions='all',binwidth=1/100) + 
   #then various axis/legend stuff
   xlab("Block") + 
   theme_bw() + 
