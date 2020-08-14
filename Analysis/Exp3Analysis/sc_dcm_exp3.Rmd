@@ -360,10 +360,7 @@ Want to check for effect we say in Exp 1 and 2, namely more frequent use of SOV 
 
 ```{r exp3-wordorder}
 exp3.sov.summary.by.animacy <- aggregate(isSOV~Animacy+Day+ProportionMarked + workerId,data=subset(exp3Data,Block=="SentenceTest1" & grammatical),FUN=mean)
-#this is aggregating over animacy
-exp3.sov.summary.total <- aggregate(isSOV~Day+ProportionMarked+workerId,data=subset(exp3Data,Block=="SentenceTest1" & grammatical),FUN=mean)
-#needs to have this column for plotting compatability with casemarking.summary.by.animacy
-exp3.sov.summary.total$Animacy <- "All" 
+
 
 ggplot(data=exp3.sov.summary.by.animacy, aes(x=Day, y=isSOV, fill=Animacy, colour=Animacy)) +
   facet_grid(ProportionMarked~.) +
@@ -372,15 +369,6 @@ ggplot(data=exp3.sov.summary.by.animacy, aes(x=Day, y=isSOV, fill=Animacy, colou
   stat_summary(geom='point', fun.y='mean', position=position_dodge(0.9), size=3) +
   stat_summary(geom='point', fun.y='mean', position=position_dodge(0.9), size=3, shape=1, colour='black') +
   
-  #point 95CI for grand means
-  stat_summary(data=exp3.sov.summary.total,geom='errorbar', 
-               fun.data='mean_cl_boot',fun.ymin="min", fun.ymax="max",width=0.15,position=position_dodge(0.9),
-               color='black',show.legend = FALSE) +
-  stat_summary(data=exp3.sov.summary.total,geom='point', fun.y='mean', position=position_dodge(0.9),
-               size=3) +
-  stat_summary(data=exp3.sov.summary.total,geom='point', fun.y='mean', position=position_dodge(0.9),
-               size=3, shape=1, colour='black') +
-  
   #by-participant data
   geom_dotplot(aes(x=Day, y=isSOV, shape=Animacy),binaxis = "y", stackdir = "center",alpha=0.5,dotsize=1,position=position_dodge(0.9),binpositions='all',binwidth=1/100) + 
   #then various axis/legend stuff
@@ -388,8 +376,8 @@ ggplot(data=exp3.sov.summary.by.animacy, aes(x=Day, y=isSOV, fill=Animacy, colou
   theme_bw() + 
   ylab("Proportion of SOV sentences") + 
   theme(legend.title=element_blank()) + 
-  scale_colour_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) +
-  scale_fill_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) +
+  scale_colour_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate object", "Animate object")) +
+  scale_fill_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate object", "Animate object")) +
   ggsave("../Figures/exp3-wordorder.pdf",width=9, height=9)
 ```
 
@@ -411,15 +399,6 @@ ggplot(data=exp3.sov.summary.by.animacy, aes(x=Day, y=isSOV, fill=Animacy,colour
   stat_summary(geom='point', fun.y='mean', position=position_dodge(0.9), size=3) +
   stat_summary(geom='point', fun.y='mean', position=position_dodge(0.9), size=3, shape=1, colour='black') +
   
-  #point 95CI for grand means
-  stat_summary(data=exp3.sov.summary.total,geom='errorbar', 
-               fun.data='mean_cl_boot',fun.ymin="min", fun.ymax="max",width=0.15,position=position_dodge(0.9),
-               color='black',show.legend = FALSE) +
-  stat_summary(data=exp3.sov.summary.total,geom='point', fun.y='mean', position=position_dodge(0.9),
-               size=3) +
-  stat_summary(data=exp3.sov.summary.total,geom='point', fun.y='mean', position=position_dodge(0.9),
-               size=3, shape=1, colour='black') +
-  
   #horizontal line showing input
   geom_hline(yintercept=0.4,linetype=3) +
   
@@ -433,8 +412,8 @@ ggplot(data=exp3.sov.summary.by.animacy, aes(x=Day, y=isSOV, fill=Animacy,colour
   theme_bw() + 
   ylab("Proportion of SOV sentences") + 
   theme(legend.title=element_blank()) + 
-  scale_colour_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) +
-  scale_fill_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) +
+  scale_colour_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate object", "Animate object")) +
+  scale_fill_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate object", "Animate object")) +
   ggsave("../Figures/exp3-wordorder-collapsed.pdf",width=9, height=4.5)
 ```
 
@@ -520,10 +499,6 @@ summary(exp3.caseorder.model.1)
 Plotting with facets for ProportionMarked and EventType - it's a bit messy...
 ```{r exp3-casemarking} 
 exp3.casemarking.summary.by.animacy <- aggregate(casemarked~Animacy+Day+ProportionMarked+EventType+workerId,data=subset(exp3Data,Block=="SentenceTest1" & grammatical),FUN=mean)
-#this is aggregating over animacy
-exp3.casemarking.summary.total <- aggregate(casemarked~Day+ProportionMarked+EventType+workerId,data=subset(exp3Data,Block=="SentenceTest1" & grammatical),FUN=mean)
-#needs to have this column for plotting compatability with casemarking.summary.by.animacy
-exp3.casemarking.summary.total$Animacy <- "All" 
 
 #Need inputs 
 exp3lowfalse.inputs.2 <- data.frame(Day=rep(c(1,2,3),2),
@@ -566,13 +541,6 @@ ggplot(data=exp3.casemarking.summary.by.animacy, aes(x=Day, y=casemarked,
   stat_summary(geom='point',fun.y='mean', position=position_dodge(0.9),size=3) +
   stat_summary(geom='point',fun.y='mean', position=position_dodge(0.9),size=3,shape=1,colour='black') +
   
-  #point 95CI for grand means
-  stat_summary(data=exp3.casemarking.summary.total,aes(x=Day,y=casemarked),geom='errorbar',
-               fun.data='mean_cl_boot',fun.ymin="min",
-               fun.ymax="max",width=0.15,position=position_dodge(0.9),
-               colour='black',show.legend = FALSE) +
-  stat_summary(data=exp3.casemarking.summary.total,aes(x=Day,y=casemarked),geom='point', fun.y='mean', position=position_dodge(0.9),shape=19,size=3,show.legend = FALSE) +
-  stat_summary(data=exp3.casemarking.summary.total,aes(x=Day,y=casemarked),geom='point', fun.y='mean', position=position_dodge(0.9),shape=1,size=3,colour='black',show.legend = FALSE) +
   
   #horizontal lines showing input
   geom_errorbar(data=exp3.inputs.2, aes(x=Day,ymax=casemarked, ymin=casemarked),position=position_dodge(0.9),
@@ -594,8 +562,8 @@ ggplot(data=exp3.casemarking.summary.by.animacy, aes(x=Day, y=casemarked,
   theme_bw() + 
   ylab("Proportion of case-marked objects") + 
   theme(legend.title=element_blank()) + 
-  scale_fill_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) +
-  scale_colour_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) +
+  scale_fill_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate object", "Animate object")) +
+  scale_colour_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate object", "Animate object")) +
   ggsave("../Figures/exp3-casemarking.pdf",width=9, height=9)
 
 ```
@@ -843,17 +811,13 @@ exp3RecallVsInteractionData <- subset(exp3Data,(Block=="Interaction" | Block=="S
 exp3RecallVsInteractionData$Block <- relevel(droplevels(exp3RecallVsInteractionData$Block),ref="SentenceTest1")
 
 exp3.recall.vs.interaction.summary <- aggregate(casemarked~Animacy+Block+EventType+ProportionMarked+workerId,data=exp3RecallVsInteractionData,FUN=mean)
-#this is aggregating over animacy
-exp3.recall.vs.interaction.summary.total <- aggregate(casemarked~Block+EventType+ProportionMarked+workerId,data=exp3RecallVsInteractionData,FUN=mean)
+
 
 #prettier names for printing
 exp3.recall.vs.interaction.summary$Block <- revalue(exp3.recall.vs.interaction.summary$Block,
                                          c("SentenceTest1"="Recall",
                                            "Interaction"="Interaction"))
-exp3.recall.vs.interaction.summary.total$Block <- revalue(exp3.recall.vs.interaction.summary.total$Block,
-                                         c("SentenceTest1"="Recall",
-                                           "Interaction"="Interaction"))
-exp3.recall.vs.interaction.summary.total$Animacy <- "All" 
+
 ```
 
 Stats suggest no interaction between ProportionMarked and Block, so plotting this collapsed over those. Note that reference line is 50%.
@@ -869,16 +833,6 @@ ggplot(data=exp3.recall.vs.interaction.summary, aes(x=Block, y=casemarked,
   stat_summary(geom='point', fun.y='mean', position=position_dodge(0.9),size=3,
                shape=1,colour='black') +
   
-  #point 95CI for grand means
-  stat_summary(data=exp3.recall.vs.interaction.summary.total,
-                geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min",
-                fun.ymax="max",width=0.15,position=position_dodge(0.9),
-                color='black',show.legend = FALSE) +
-  stat_summary(data=exp3.recall.vs.interaction.summary.total,geom='point', 
-               fun.y='mean', position=position_dodge(0.9),size=3) +
-  stat_summary(data=exp3.recall.vs.interaction.summary.total,geom='point', 
-               fun.y='mean', position=position_dodge(0.9),size=3,
-               shape=1,colour='black') +
    
   #horizontal line showing input
   geom_hline(yintercept=0.5,linetype=3) +
@@ -889,8 +843,8 @@ ggplot(data=exp3.recall.vs.interaction.summary, aes(x=Block, y=casemarked,
   theme_bw() + 
   ylab("Proportion of case-marked objects") + 
   theme(legend.title=element_blank()) + 
-  scale_colour_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) + 
-  scale_fill_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) + 
+  scale_colour_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate object", "Animate object")) + 
+  scale_fill_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate object", "Animate object")) + 
   ggsave("../Figures/exp3-interaction-casemarking-collapsed.pdf",width=9, height=6)
 ```
 
@@ -909,16 +863,6 @@ ggplot(data=exp3.recall.vs.interaction.summary, aes(x=Block, y=casemarked,
   stat_summary(geom='point', fun.y='mean', position=position_dodge(0.9),size=3,
                shape=1,colour='black') +
   
-  #point 95CI for grand means
-  stat_summary(data=exp3.recall.vs.interaction.summary.total,
-                geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min",
-                fun.ymax="max",width=0.15,position=position_dodge(0.9),
-                color='black',show.legend = FALSE) +
-  stat_summary(data=exp3.recall.vs.interaction.summary.total,geom='point', 
-               fun.y='mean', position=position_dodge(0.9),size=3) +
-  stat_summary(data=exp3.recall.vs.interaction.summary.total,geom='point', 
-               fun.y='mean', position=position_dodge(0.9),size=3,
-               shape=1,colour='black') +
    
   #horizontal line showing input
   geom_hline(data=exp3.inputs.2,aes(yintercept=casemarked),linetype=3) +
@@ -929,8 +873,8 @@ ggplot(data=exp3.recall.vs.interaction.summary, aes(x=Block, y=casemarked,
   theme_bw() + 
   ylab("Proportion of case-marked objects") + 
   theme(legend.title=element_blank()) + 
-  scale_colour_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) + 
-  scale_fill_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) + 
+  scale_colour_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate object", "Animate object")) + 
+  scale_fill_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate object", "Animate object")) + 
   ggsave("../Figures/exp3-interaction-casemarking.pdf",width=9, height=6)
 ```
 

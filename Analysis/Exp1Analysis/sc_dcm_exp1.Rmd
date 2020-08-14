@@ -170,10 +170,6 @@ my.logodds.p(0.6,exp1.score.model.simpler,"(Intercept)")
 ```{r exp1-casemarking}
 exp1.casemarking.summary.by.animacy <- aggregate(casemarked~Animacy+Day+EventType+workerId,data=subset(exp1Data,Block=="SentenceTest1" & grammatical),FUN=mean)
 
-#this is aggregating over animacy
-exp1.casemarking.summary.total <- aggregate(casemarked~Day+EventType+workerId,data=subset(exp1Data,Block=="SentenceTest1" & grammatical),FUN=mean)
-#needs to have this column for plotting compatability with casemarking.summary.by.animacy
-exp1.casemarking.summary.total$Animacy <- "All" 
 
 ggplot(data=exp1.casemarking.summary.by.animacy, aes(x=Day, y=casemarked,
                                                      colour=Animacy,fill=Animacy)) +
@@ -183,13 +179,6 @@ ggplot(data=exp1.casemarking.summary.by.animacy, aes(x=Day, y=casemarked,
   stat_summary(geom='point',fun.y='mean', position=position_dodge(0.9),size=3) +
   stat_summary(geom='point',fun.y='mean', position=position_dodge(0.9),size=3,shape=1,colour='black') +
   
-  #point 95CI for grand means
-  stat_summary(data=exp1.casemarking.summary.total,aes(x=Day,y=casemarked),geom='errorbar',
-               fun.data='mean_cl_boot',fun.ymin="min",
-               fun.ymax="max",width=0.15,position=position_dodge(0.9),
-               colour='black',show.legend = FALSE) +
-  stat_summary(data=exp1.casemarking.summary.total,aes(x=Day,y=casemarked),geom='point', fun.y='mean', position=position_dodge(0.9),shape=19,size=3,show.legend = FALSE) +
-  stat_summary(data=exp1.casemarking.summary.total,aes(x=Day,y=casemarked),geom='point', fun.y='mean', position=position_dodge(0.9),shape=1,size=3,colour='black',show.legend = FALSE) +
   
   #horizontal line showing input
   geom_hline(yintercept=0.6,linetype=3) +
@@ -203,8 +192,8 @@ ggplot(data=exp1.casemarking.summary.by.animacy, aes(x=Day, y=casemarked,
   theme_bw() + 
   ylab("Proportion of case-marked objects") + 
   theme(legend.title=element_blank()) + 
-  scale_fill_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) +
-  scale_colour_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) +
+  scale_fill_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate object", "Animate object")) +
+  scale_colour_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate object", "Animate object")) +
   ggsave("../Figures/exp1-casemarking.pdf",width=9, height=9)
 
 ```
@@ -334,17 +323,12 @@ exp1RecallVsInteractionData <- subset(exp1Data,(Block=="Interaction" | Block=="S
 exp1RecallVsInteractionData$Block <- relevel(droplevels(exp1RecallVsInteractionData$Block),ref="SentenceTest1")
 
 exp1.recall.vs.interaction.summary <- aggregate(casemarked~Animacy+Block+workerId+EventType,data=exp1RecallVsInteractionData,FUN=mean)
-#this is aggregating over animacy
-exp1.recall.vs.interaction.summary.total <- aggregate(casemarked~Block+EventType+workerId,data=exp1RecallVsInteractionData,FUN=mean)
+
 
 #prettier names for printing
 exp1.recall.vs.interaction.summary$Block <- revalue(exp1.recall.vs.interaction.summary$Block,
                                          c("SentenceTest1"="Recall",
                                            "Interaction"="Interaction"))
-exp1.recall.vs.interaction.summary.total$Block <- revalue(exp1.recall.vs.interaction.summary.total$Block,
-                                         c("SentenceTest1"="Recall",
-                                           "Interaction"="Interaction"))
-exp1.recall.vs.interaction.summary.total$Animacy <- "All" 
 ```
 
 
@@ -358,17 +342,7 @@ ggplot(data=exp1.recall.vs.interaction.summary, aes(x=Block, y=casemarked,
   stat_summary(geom='point', fun.y='mean', position=position_dodge(0.9),size=3,
                shape=1,colour='black') +
   
-  #point 95CI for grand means
-  stat_summary(data=exp1.recall.vs.interaction.summary.total,
-                geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min",
-                fun.ymax="max",width=0.15,position=position_dodge(0.9),
-                color='black',show.legend = FALSE) +
-  stat_summary(data=exp1.recall.vs.interaction.summary.total,geom='point', 
-               fun.y='mean', position=position_dodge(0.9),size=3) +
-  stat_summary(data=exp1.recall.vs.interaction.summary.total,geom='point', 
-               fun.y='mean', position=position_dodge(0.9),size=3,
-               shape=1,colour='black') +
-   
+  
   #horizontal line showing input
   geom_hline(yintercept=0.6,linetype=3) +
   #by-participant data
@@ -378,8 +352,8 @@ ggplot(data=exp1.recall.vs.interaction.summary, aes(x=Block, y=casemarked,
   theme_bw() + 
   ylab("Proportion of case-marked objects") + 
   theme(legend.title=element_blank()) + 
-  scale_colour_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) + 
-  scale_fill_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) + 
+  scale_colour_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate object", "Animate object")) + 
+  scale_fill_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate object", "Animate object")) + 
   ggsave("../Figures/exp1-interaction-casemarking.pdf",width=9, height=6)
 ```
 
@@ -404,10 +378,7 @@ summary(exp1.recall.vs.interaction.model.1)
 
 ```{r exp1-wordorder}
 exp1.sov.summary.by.animacy <- aggregate(isSOV~Animacy+Day+EventType+workerId,data=subset(exp1Data,Block=="SentenceTest1" & grammatical),FUN=mean)
-#this is aggregating over animacy
-exp1.sov.summary.total <- aggregate(isSOV~Day+EventType+workerId,data=subset(exp1Data,Block=="SentenceTest1" & grammatical),FUN=mean)
-#needs to have this column for plotting compatability with casemarking.summary.by.animacy
-exp1.sov.summary.total$Animacy <- "All" 
+
 
 ggplot(data=exp1.sov.summary.by.animacy, aes(x=Day, y=isSOV, fill=Animacy, colour=Animacy)) +
   facet_grid(EventType~.) +
@@ -415,16 +386,6 @@ ggplot(data=exp1.sov.summary.by.animacy, aes(x=Day, y=isSOV, fill=Animacy, colou
   stat_summary(geom='errorbar', fun.data='mean_cl_boot',fun.ymin="min", fun.ymax="max",width=0.3,position=position_dodge(0.9),color='black') +
   stat_summary(geom='point', fun.y='mean', position=position_dodge(0.9), size=3) +
   stat_summary(geom='point', fun.y='mean', position=position_dodge(0.9), size=3, shape=1, colour='black') +
-  
-  #point 95CI for grand means
-  stat_summary(data=exp1.sov.summary.total,geom='errorbar', 
-               fun.data='mean_cl_boot',fun.ymin="min", fun.ymax="max",width=0.15,position=position_dodge(0.9),
-               color='black',show.legend = FALSE) +
-  stat_summary(data=exp1.sov.summary.total,geom='point', fun.y='mean', position=position_dodge(0.9),
-               size=3) +
-  stat_summary(data=exp1.sov.summary.total,geom='point', fun.y='mean', position=position_dodge(0.9),
-               size=3, shape=1, colour='black') +
-  
   
   #horizontal line showing input
   geom_hline(yintercept=0.6,linetype=3) +
@@ -435,17 +396,14 @@ ggplot(data=exp1.sov.summary.by.animacy, aes(x=Day, y=isSOV, fill=Animacy, colou
   theme_bw() + 
   ylab("Proportion of SOV sentences") + 
   theme(legend.title=element_blank()) + 
-  scale_colour_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) +
-  scale_fill_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) +
+  scale_colour_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate object", "Animate object")) +
+  scale_fill_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate object", "Animate object")) +
   ggsave("../Figures/exp1-wordorder.pdf",width=9, height=9)
 ```
 
 ```{r exp1-wordorder-collapsed}
 exp1.sov.summary.by.animacy.collapsed <- aggregate(isSOV~Animacy+Day+workerId,data=subset(exp1Data,Block=="SentenceTest1" & grammatical),FUN=mean)
-#this is aggregating over animacy
-exp1.sov.summary.total.collapsed <- aggregate(isSOV~Day+workerId,data=subset(exp1Data,Block=="SentenceTest1" & grammatical),FUN=mean)
-#needs to have this column for plotting compatability with casemarking.summary.by.animacy
-exp1.sov.summary.total.collapsed$Animacy <- "All" 
+
 
 #for the collapsed dotplot, there are too many participants at ceiling to show the dots - instead I am going 
 #to withhold those dots and add a numerical annotation
@@ -471,22 +429,14 @@ ggplot(data=exp1.sov.summary.by.animacy.collapsed, aes(x=Day, y=isSOV, fill=Anim
   stat_summary(geom='point', fun.y='mean', position=position_dodge(0.9), size=3) +
   stat_summary(geom='point', fun.y='mean', position=position_dodge(0.9), size=3, shape=1, colour='black') +
   
-  #point 95CI for grand means
-  stat_summary(data=exp1.sov.summary.total.collapsed,geom='errorbar', 
-               fun.data='mean_cl_boot',fun.ymin="min", fun.ymax="max",width=0.15,position=position_dodge(0.9),
-               color='black',show.legend = FALSE) +
-  stat_summary(data=exp1.sov.summary.total.collapsed,geom='point', fun.y='mean', position=position_dodge(0.9),
-               size=3) +
-  stat_summary(data=exp1.sov.summary.total.collapsed,geom='point', fun.y='mean', position=position_dodge(0.9),
-               size=3, shape=1, colour='black') +
   
   #then various axis/legend stuff
   xlab("Day") + 
   theme_bw() + 
   ylab("Proportion of SOV sentences") + 
   theme(legend.title=element_blank()) + 
-  scale_colour_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) +
-  scale_fill_manual(values=my.colours,breaks=c("All","FALSE", "TRUE"),labels=c("All data","Inanimate object", "Animate object")) +
+  scale_colour_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate object", "Animate object")) +
+  scale_fill_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate object", "Animate object")) +
   ggsave("../Figures/exp1-wordorder-collapsed.pdf",width=9, height=4.5)
 ```
 
