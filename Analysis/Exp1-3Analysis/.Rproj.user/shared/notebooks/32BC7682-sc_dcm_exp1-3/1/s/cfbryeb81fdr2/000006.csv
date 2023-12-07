@@ -1,5 +1,0 @@
-"0","last5Recall <- subset(exp1.to.3.recall.data,trialNumberBinned==7)"
-"0","#renumber the bins in the interaction data"
-"0","exp1.to.3interaction.direct.data$trialNumberBinned <- exp1.to.3interaction.direct.data$trialNumberBinned+1"
-"0","#call the Recall data bin 0"
-"0","last5Recall$trialNumberBinned <- 0"

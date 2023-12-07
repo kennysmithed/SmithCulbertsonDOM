@@ -1,4 +1,0 @@
-"0","exp1.to.3casemarking.timecourse.model.1 <- glmer(casemarked ~ trialNumberMinus*Animacy * EventType + (1 + trialNumberMinus*Animacy | workerId),data=exp1.to.3interaction.direct.data,family=binomial,control=glmerControl(optimizer=""bobyqa"",optCtrl=list(maxfun=50000)))
-"
-"2","
-"

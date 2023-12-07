@@ -24,9 +24,8 @@ get.estimate.se <- function(model.df,fixed.effect) {
 }
 
 my.logodds.p <- function(baseline.proportion,model,predictor) {
-  model.df <- tidy(model)
-  estimate.logodds <- get.estimate(model.df,predictor)
-  estimate.se <- get.estimate.se(model.df,predictor)
+  estimate.logodds <- summary(model)$coefficients[predictor,"Estimate"]
+  estimate.se <- summary(model)$coefficients[predictor,"Std. Error"]
   baseline_logodds <- prob2logit(baseline.proportion)
   z.score = (estimate.logodds-baseline_logodds)/estimate.se #subtract baseline from coefficient and divide by standard error 
   p.value = 2*pnorm(-abs(z.score)) #obtain op value from z score

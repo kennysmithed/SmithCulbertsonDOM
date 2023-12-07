@@ -1,0 +1,716 @@
+---
+title: "DCM analysis"
+author: "Kenny Smith and Jennifer Culbertson"
+date: "29/11/2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(width = 250)
+library(ggplot2)
+library(plyr)
+library(dplyr)
+library(lme4)
+library(stargazer)
+
+#load utility functions
+source('_Utilities.R')
+
+#define colours
+#First one is neutral, e.g. for totals
+my.colours <- c("#808080","#EA7D00","#006DE9")
+```
+
+
+# Introduction
+
+# Load the data.
+
+```{r loaddata}
+
+#load data
+data <- read.csv('RawData/rawdata.csv')
+
+#set everything to factors
+data$Day <- as.factor(data$Day)
+data$Experiment<-as.factor(data$Experiment) 
+data$Animacy <- as.factor(data$Animacy)
+data$WordOrder <- as.factor(data$WordOrder)
+data$ProportionMarked <- as.factor(data$ProportionMarked)
+#force 40% as reference level
+data$ProportionMarked <- relevel(data$ProportionMarked,ref="40% Casemarked")
+#force OSV as reference level
+data$MajorityInputOrder <- as.factor(data$MajorityInputOrder)
+data$MajorityInputOrder <- relevel(data$MajorityInputOrder,ref="OSV majority order")
+data$OrderMarkedMore <- as.factor(data$OrderMarkedMore)
+data$OrderMarkedMore <- relevel(data$OrderMarkedMore,ref="OSV marked more")
+
+
+#at some point we switched terminology in the paper from Agents Can/Cannot be Patients to Subjects Can/Cannot Be Objects - need to correct this throughout
+data$EventType <- revalue(data$EventType,
+                              c("Agents Cannot Be Patients"="Subjects Cannot Be Objects",
+                                "Agents Can Be Patients"="Subjects Can Be Objects"))
+
+#Subjects Cannot Be Objects needs to be reference level
+data$EventType <- as.factor(data$EventType)
+data$EventType <- relevel(data$EventType,
+                                        ref="Subjects Cannot Be Objects")
+
+```
+
+# Counts of participants and participant exclusions per day
+
+```{r all-counts}
+#got this from https://stackoverflow.com/questions/12840294/counting-unique-distinct-values-by-group-in-a-data-frame
+counts.table <- ddply(data,~Day,summarise,N=length(unique(workerId)))
+counts.table
+
+scores.by.block <- aggregate(score~workerId+Day+Block,data=data,FUN=mean)
+
+failed.noun.comprehension <- subset(scores.by.block,Block=='NounComprehension2' & score<0.7)
+ddply(failed.noun.comprehension,~Day,summarise,N_excluded=length(unique(workerId)))
+
+failed.sentence.comprehension <- subset(scores.by.block,Block=='SentenceComprehension1' & score<0.7)
+ddply(failed.sentence.comprehension,~Day,summarise,N_excluded=length(unique(workerId)))
+```
+
+# Removing excluded participants
+
+In the interests of simplicity, removing all participants who don't complete all 4 days, so we have a sample of 341 throughout.
+
+```{r}
+
+day4_participants <- unique(subset(scores.by.block,Day==4)$workerId)
+data <- subset(data,workerId %in% day4_participants)
+```
+
+# Counts of grammatical/ungrammatical trials
+Including these so we can see how they were calculated.
+```{r rejections}
+aggregate(grammatical~Day,FUN=mean,data=subset(data,Block=="SentenceTest1"))
+rejection.counts <- ddply(subset(data,Block=="SentenceTest1" & grammatical==0),~wordorder,summarise,N=length(unique(workerId)))
+#ordered list of rejection types, if you want to see it - quite long
+rejection.counts <- rejection.counts[order(-rejection.counts$N),]
+```
+
+## Identification accuracy on comprehension trials
+
+```{r identification-accuracy-figure,echo=FALSE}
+
+score.summary <- aggregate(score~casemarked+Animacy+Day+EventType+workerId,data=subset(data,Block=="SentenceComprehension1"),FUN=mean)
+score.summary$casemarked <- revalue(as.factor(score.summary$casemarked),
+                                    c("FALSE"="Object not casemarked",
+                                      "TRUE"="Object casemarked"))
+
+#for the dotplot, there are too many participants at ceiling to show the dots - instead I am going to withhold those dots and add a numerical annotation
+score.summary$IsPerfect <- ifelse(score.summary$score==1,1,0)
+score.perfect.ns <- data.frame(summarise(group_by(subset(score.summary,IsPerfect==1),Day,Animacy,casemarked,EventType),n()))
+score.perfect.ns <- plyr::rename(score.perfect.ns,c("n.."="count"))
+#manually adding 0 counts!
+score.perfect.ns <- tidyr::complete(score.perfect.ns,Day,Animacy,casemarked,EventType,fill=list(count=0))
+
+ggplot(data=score.summary, aes(x=factor(Day), y=score, fill=Animacy,colour=Animacy)) +
+  #facet by condition and marking
+  facet_grid(EventType~casemarked) +
+  #bars and CIs for score by animacy
+  stat_summary(geom='errorbar', fun.data='mean_cl_boot',width=0.3,position=position_dodge(0.9),colour='black') + 
+  #to add coloured points with black outline, need to plot twice to over-ride colour aesthetic
+  stat_summary(geom='point', fun='mean', position=position_dodge(0.9),size=2) +
+  stat_summary(geom='point', fun='mean', position=position_dodge(0.9),size=2,shape=1,colour='black') +
+  #horizontal line showing chance
+  geom_hline(yintercept=0.5,linetype=3) + 
+  
+  #by-participant data
+  geom_dotplot(data=subset(score.summary,IsPerfect==0),
+                aes(x=factor(Day), y=score, fill=factor(Animacy)),
+               binaxis = "y", 
+                stackdir = "centerwhole",stackratio=1,alpha=0.5,dotsize=0.18,
+                position=position_dodge(0.9),#binpositions='all',binwidth=1/100
+               ) +
+  #add counts of perfect as text
+  geom_text(data=score.perfect.ns,aes(x=Day,y=1.05,label=count),position=position_dodge(0.9),size=3,colour='black') +
+  #then various axis/legend stuff
+  xlab("Day") + 
+  theme_bw() + 
+  scale_y_continuous(name="Proportion correct responses",breaks=seq(0,1,0.25)) +
+  theme(legend.title=element_blank(),legend.position="top") + 
+  scale_fill_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate object", "Animate object")) + 
+  scale_colour_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate object", "Animate object"))
+  
+ggsave("Figures/identification-accuracy.pdf",width=9, height=9)
+```
+
+Contrast coding for analysis - dummy code for casemarked, Day, EventType, so that intercept indicates unmarked, day 1, Subjects Cannot Be Objects. Deviation code ProportionMarked and MajorityInputOrder.
+```{r}
+#dummy code casemarked, Day, EventType - intercept indicates unmarked, day 1, Subjects Cannot Be Objects
+contrasts(data$casemarked) <- NULL
+contrasts(data$Day) <- NULL
+contrasts(data$EventType) <- NULL
+
+#deviation coding for ProportionMarked: + = 60% casemarked
+contrasts(data$ProportionMarked) <- c(-0.5,0.5)
+#deviation coding for MajorityInputOrder: + = SOV majority order 
+contrasts(data$MajorityInputOrder) <- c(-0.5,0.5)
+```
+
+For main text, just running simpler models where we exclude the language factors.
+
+```{r identification-accuracy-stat, cache=TRUE}
+#this takes amazingly long but converges
+score.model.full <- glmer(score~casemarked * Day * EventType + (1 + casemarked*Day | workerId),data=subset(data,Block=="SentenceComprehension1" & Animacy==TRUE),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=50000)))
+```
+
+```{r}
+summary(score.model.full)
+```
+
+
+Performance at the intercept is significantly above 50\%, and indeed significantly higher than if participants made optimal use of word order cues to agency, 60\% of sentences used the majority order, which would yield an expected log odds of success for an attentive learner of:
+```{r}
+prob2logit(0.6)
+```
+, which is significantly lower than the success rates of our participants:
+```{r}
+my.logodds.p(0.6,score.model.full,"(Intercept)")
+```
+
+
+Plot split by input language (for supporting information). For this we are just looking at unmarked animates, so I am using two shades of blue.
+
+```{r}
+score.summary.by.lang <- aggregate(score~ProportionMarked+MajorityInputOrder+casemarked+Animacy+Day+EventType+workerId,data=subset(data,Block=="SentenceComprehension1"),FUN=mean)
+score.summary.by.lang$casemarked <- revalue(as.factor(score.summary.by.lang$casemarked),
+                                    c("FALSE"="Object not casemarked",
+                                      "TRUE"="Object casemarked"))
+
+#for the dotplot, there are too many participants at ceiling to show the dots - instead I am going to withhold those dots and add a numerical annotation
+score.summary.by.lang$IsPerfect <- ifelse(score.summary.by.lang$score==1,1,0)
+score.summary.by.lang.perfect.ns <- data.frame(summarise(group_by(subset(score.summary.by.lang,IsPerfect==1),ProportionMarked,MajorityInputOrder,Day,Animacy,casemarked,EventType),n()))
+score.summary.by.lang.perfect.ns <- plyr::rename(score.summary.by.lang.perfect.ns,c("n.."="count"))
+#manually adding 0 counts!
+score.summary.by.lang.perfect.ns <- tidyr::complete(score.summary.by.lang.perfect.ns,ProportionMarked,MajorityInputOrder,Day,Animacy,casemarked,EventType,fill=list(count=0))
+
+```
+
+```{r, identification-accuracy-figure-bylang}
+ggplot(data=subset(score.summary.by.lang,Animacy==TRUE & casemarked=="Object not casemarked"), aes(x=Day, y=score, fill=ProportionMarked,colour=ProportionMarked)) +
+  #facet by condition and marking
+  facet_grid(EventType~MajorityInputOrder) +
+  #bars and CIs for score by animacy
+  stat_summary(geom='errorbar', fun.data='mean_cl_boot',fun.min="min", fun.max="max",width=0.3,position=position_dodge(0.9),colour='black') + 
+  stat_summary(geom='point', fun='mean', position=position_dodge(0.9),size=2) +
+  stat_summary(geom='point', fun='mean', position=position_dodge(0.9),size=2,shape=1,colour='black') +
+  #horizontal line showing chance
+  geom_hline(yintercept=0.5,linetype=3) +  
+geom_dotplot(data=subset(score.summary.by.lang,IsPerfect==0 & Animacy==TRUE & casemarked=="Object not casemarked"),
+                aes(x=Day, y=score, fill=ProportionMarked),
+               binaxis = "y",
+                stackdir = "centerwhole",stackratio=1,alpha=0.5,dotsize=0.4,
+                position=position_dodge(0.9),#binpositions='all',binwidth=1/100
+               ) +
+  #add counts of perfect as text
+  geom_text(data=subset(score.summary.by.lang.perfect.ns,Animacy==TRUE & casemarked=="Object not casemarked" & !is.na(MajorityInputOrder)),aes(x=Day,y=1.05,label=count),position=position_dodge(0.9),size=3,colour='black') +
+  #then various axis/legend stuff
+  xlab("Day") +
+  theme_bw() +
+  scale_y_continuous(name="Proportion correct responses",breaks=seq(0,1,0.25)) +
+  theme(legend.title=element_blank(),legend.position="top") +
+  scale_fill_manual(values=c('lightblue','darkblue')) + 
+  scale_colour_manual(values=c('lightblue','darkblue'))
+
+ggsave("Figures/identification-accuracy-by-lang.pdf",width=9, height=9)
+```
+
+In the interests of interpretability, just running the most complex stat on unmarked animates, since these are the interesting ones! In addition to the expected effects, looks like:
+
+40% marked languages do a bit better on day 1 (as indicated by negative effect of ProportionMarked). This advantage is missing at day 2 (as indicated by a + ProportionMarked:Day interaction), but since that interaction is only present in day 2 I am not sure it's very meaningful. 
+
+The 60% casemarked, SOV-majority guys in Subjects Cannot Be Objects are worse than everyone else on day 1 (ProportionMarked1:MajorityInputOrder1) but this seems to be a quirk of Day 1, as indicated by positive 3-way interactions with Day 2, Day 3 and Day 4 (the Day 3 and Day 4 interactions are significant) - by Day 4 they are the best. The complex 4-way interaction just marks the absence of this effect for the Subjects Cannot Be Objects guys. 
+
+So in sum, probably the only interesting result here is that the participants with less frequent casemarking do a little better on *unmarked* nouns across the board, suggesting they are more attentive to the word order cue. 
+
+```{r identification-accuracy-stat-bylang-1, cache=TRUE}
+score.model.bylang.1 <- glmer(score~Day * EventType * ProportionMarked * MajorityInputOrder + (1 + Day | workerId),data=subset(data,Block=="SentenceComprehension1" & Animacy==TRUE & casemarked==FALSE),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=50000)))
+```
+
+Model 1 is singular, trying uncorrelated intercepts and slopes.
+
+```{r identification-accuracy-stat-bylang-2, cache=TRUE}
+score.model.bylang.2 <- glmer(score~Day * EventType * ProportionMarked * MajorityInputOrder + (1 | workerId) + (0 + Day | workerId),data=subset(data,Block=="SentenceComprehension1" & Animacy==TRUE & casemarked==FALSE),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=50000)))
+```
+
+Model 2 also singular, so forced to use the most simple one.
+
+```{r}
+score.model.bylang.simple <- glmer(score~Day * EventType * ProportionMarked * MajorityInputOrder + (1 | workerId),data=subset(data,Block=="SentenceComprehension1" & Animacy==TRUE & casemarked==FALSE),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=50000)))
+```
+
+```{r}
+summary(score.model.bylang.simple)
+```
+
+# Word order and animacy
+
+Want to check for more frequent use of SOV with inanimate objects (= higher use of OSV with animate objects).
+
+
+```{r wordorder-collapsed}
+sov.summary.by.animacy <- aggregate(isSOV~Animacy+Day+MajorityInputOrder+ProportionMarked+workerId,data=subset(data,Block=="SentenceTest1" & grammatical),FUN=mean)
+
+#for the collapsed dotplot, there are too many participants at ceiling to show the dots - instead I am going 
+#to withhold those dots and add a numerical annotation
+sov.summary.by.animacy$IsPerfect <- ifelse(sov.summary.by.animacy$isSOV==1,1,0)
+sov.summary.by.animacy$Day <- droplevels(sov.summary.by.animacy$Day)
+allsov.ns <- data.frame(summarize(group_by(subset(sov.summary.by.animacy,IsPerfect==1 & Day!=1),Day,Animacy,.drop = FALSE),n()))
+allsov.ns <- plyr::rename(allsov.ns,c("n.."="count"))
+
+#Input levels
+word.order.inputs <- data.frame(MajorityInputOrder=c("SOV majority order","OSV majority order"),
+                          isSOV=c(0.6,0.4))
+
+
+
+
+
+
+ggplot(data=sov.summary.by.animacy, aes(x=Day, y=isSOV, fill=Animacy,colour=Animacy)) +
+  facet_grid(MajorityInputOrder~.) +
+  #points and CIs for word order by animacy
+  stat_summary(geom='errorbar', fun.data='mean_cl_boot',fun.min="min", fun.max="max",width=0.3,position=position_dodge(0.9),color='black') +
+  stat_summary(geom='point', fun='mean', position=position_dodge(0.9), size=3) +
+  stat_summary(geom='point', fun='mean', position=position_dodge(0.9), size=3, shape=1, colour='black') +
+  
+  
+  #horizontal lines showing input
+  geom_hline(data=word.order.inputs, aes(yintercept=isSOV),linetype=3) +
+  
+  
+  #by-participant data
+  geom_dotplot(data=subset(sov.summary.by.animacy,IsPerfect!=1),binaxis = "y", stackdir = "center",alpha=0.5,dotsize=2,position=position_dodge(0.9),binpositions='all',binwidth=1/100) +
+  geom_text(data=allsov.ns,aes(x=Day,y=1.05,label=count),position=position_dodge(0.9),size=3,colour='black') +
+
+  #then various axis/legend stuff
+  xlab("Day") +
+  theme_bw() +
+  theme(legend.title=element_blank()) +
+  scale_y_continuous(name="Proportion of SOV sentences",breaks=seq(0,1,0.25)) +
+  
+  scale_colour_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate object", "Animate object")) +
+  scale_fill_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate object", "Animate object"))
+
+ggsave("Figures/wordorder-collapsed.pdf",width=9, height=4.5)
+```
+
+Stat - primary question is whether animacy affects word order, but including MajorityInputOrder here since that should affect proportion of SOV use!
+
+Contrast coding for analysis - dummy code for Day and MajorityInputOrder, so that intercept indicates day 2, OSV input. Deviation code animacy.
+
+```{r wordorder-stat,cache=TRUE}
+contrasts(data$Day) <- NULL
+contrasts(data$MajorityInputOrder) <- NULL
+contrasts(data$Animacy) <- c(-0.5,0.5)
+```
+
+
+```{r}
+sovorder.model.1 <- glmer(isSOV ~ Animacy * Day * MajorityInputOrder  + (1 + Animacy * Day | workerId),data=subset(data,Block=="SentenceTest1" & grammatical),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=50000)))
+```
+
+
+```{r}
+summary(sovorder.model.1)
+```
+
+# Word order and case correlation
+
+Also check for learning of conditioning of marking on word order. Quite striking: when the input features more frequent casemarking of OSV sentences (in the OSV-majority language with 60\% casemarking, or the SOV-majority language with 40\% casemarking) participants reproduce this conditioning of casemarking on word order; however, when the input casemarks SOV sentences more, participants fail to reproduce that conditioning.
+
+```{r}
+data$casemarked_numeric <- ifelse(data$casemarked==FALSE,0,1)
+case.summary.by.order.collapsed <- aggregate(casemarked_numeric~Day+WordOrder+ProportionMarked+MajorityInputOrder+workerId,data=subset(data,Block=="SentenceTest1" & grammatical),FUN=mean)
+
+
+#Input levels
+sov.40.inputs <- data.frame(Day=rep(c(1,2,3),2),
+                          WordOrder=rep(c('OSV','SOV'),each=3),
+                          casemarked_numeric=rep(c(1/2,1/3),each=3),
+                          MajorityInputOrder="SOV majority order",
+                          ProportionMarked="40% Casemarked")
+sov.60.inputs <- data.frame(Day=rep(c(1,2,3),2),
+                          WordOrder=rep(c('OSV','SOV'),each=3),
+                          casemarked_numeric=rep(c(1/2,2/3),each=3),
+                          MajorityInputOrder="SOV majority order",
+                          ProportionMarked="60% Casemarked")
+osv.40.inputs <- data.frame(Day=rep(c(1,2,3),2),
+                          WordOrder=rep(c('OSV','SOV'),each=3),
+                          casemarked_numeric=rep(c(1/3,1/2),each=3),
+                          MajorityInputOrder="OSV majority order",
+                          ProportionMarked="40% Casemarked")
+osv.60.inputs <- data.frame(Day=rep(c(1,2,3),2),
+                          WordOrder=rep(c('OSV','SOV'),each=3),
+                          casemarked_numeric=rep(c(2/3,1/2),each=3),
+                          MajorityInputOrder="OSV majority order",
+                          ProportionMarked="60% Casemarked")
+
+word.order.case.inputs <- rbind(sov.40.inputs,sov.60.inputs,osv.40.inputs,osv.60.inputs)
+
+
+
+ggplot(data=case.summary.by.order.collapsed, aes(x=Day, y=casemarked_numeric, fill=WordOrder, colour=WordOrder)) +
+  facet_grid(MajorityInputOrder~ProportionMarked) +
+  #points and CIs for marking by word order
+  stat_summary(geom='errorbar', fun.data='mean_cl_boot',fun.min="min", fun.max="max",width=0.3,position=position_dodge(0.9),color='black') +
+  stat_summary(geom='point', fun='mean', position=position_dodge(0.9), size=3) +
+  stat_summary(geom='point', fun='mean', position=position_dodge(0.9), size=3, shape=1, colour='black') +
+  
+  #horizontal lines showing input
+  geom_errorbar(data=word.order.case.inputs, aes(x=Day,ymax=casemarked_numeric, ymin=casemarked_numeric),position=position_dodge(0.9),linetype=3) +
+
+  #by-participant data
+  geom_dotplot(binaxis = "y", stackdir = "center",alpha=0.5,dotsize=1.4,position=position_dodge(0.9),binpositions='all',binwidth=1/100) +
+
+  #then various axis/legend stuff
+  xlab("Day") +
+  theme_bw() +
+  ylab("Proportion of case-marked objects") +
+  theme(legend.title=element_blank()) +
+  scale_fill_manual(values=my.colours) +
+  scale_colour_manual(values=my.colours)
+
+ggsave("Figures/case-by-order-collapsed.pdf",width=9, height=4.5)
+```
+
+For the stat, going to use OrderMarkedMore as the predictor instead of MajorityInputOrder, otherwise the interactions get even more complex!
+
+Contrast coding for analysis - dummy code for Day and OrderMarkedMore (re-levelling so SOV marked more is the reference level), deviation code everything else.
+
+```{r}
+contrasts(data$Day) <- NULL
+data$OrderMarkedMoreSOVRef <- relevel(data$OrderMarkedMore,ref="SOV marked more")
+contrasts(data$OrderMarkedMoreSOVRef) <- NULL
+contrasts(data$WordOrder) <- c(-0.5,0.5)
+contrasts(data$ProportionMarked) <- c(-0.5,0.5)
+```
+
+```{r wordorder-case-stat,cache=TRUE}
+case.order.model.1 <- glmer(casemarked ~ WordOrder * Day * ProportionMarked * OrderMarkedMoreSOVRef + (1  + WordOrder * Day | workerId),data=subset(data,Block=="SentenceTest1" & grammatical),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=50000)))
+```
+
+```{r}
+summary(case.order.model.1)
+```
+
+# Case marking and animacy
+
+Check for the overall pattern of results - any hint of a DOM effect?
+
+```{r casemarking-plot} 
+casemarking.summary.by.animacy <- aggregate(casemarked_numeric~Animacy+Day+ProportionMarked+EventType+workerId,data=subset(data,Block=="SentenceTest1" & grammatical),FUN=mean)
+
+#There are a lot of participants at extreme values in *both* directions here, so need to add text annotations at both ends of the plot.
+casemarking.summary.by.animacy$IsCeiling <- ifelse(casemarking.summary.by.animacy$casemarked_numeric==1,1,0)
+casemarking.summary.by.animacy$IsFloor <- ifelse(casemarking.summary.by.animacy$casemarked_numeric==0,1,0)
+
+casemarking.summary.by.animacy$Day <- droplevels(casemarking.summary.by.animacy$Day)
+
+casemarking.ceiling.ns.collapsed <- data.frame(summarize(group_by(subset(casemarking.summary.by.animacy,IsCeiling==1 & Day!=1),Day,Animacy,ProportionMarked,EventType,.drop = FALSE),n()))
+casemarking.floor.ns.collapsed <- data.frame(summarize(group_by(subset(casemarking.summary.by.animacy,IsFloor==1 & Day!=1),Day,Animacy,ProportionMarked,EventType,.drop = FALSE),n()))
+casemarking.ceiling.ns.collapsed <- plyr::rename(casemarking.ceiling.ns.collapsed,c("n.."="count"))
+casemarking.floor.ns.collapsed <- plyr::rename(casemarking.floor.ns.collapsed,c("n.."="count"))
+
+#need to specify input split by ProportionMarked
+inputs <- data.frame(Day=rep(c(1,2,3),2),
+                               ProportionMarked=rep(c("40% Casemarked","60% Casemarked"),each=3),
+                               casemarked=rep(c(2/5,3/5),each=3))
+
+                          
+
+ggplot(data=casemarking.summary.by.animacy, aes(x=Day, y=casemarked_numeric,
+                                                     colour=Animacy,fill=Animacy)) +
+  facet_grid(EventType~ProportionMarked) +
+  #bars and CIs for casemarking by animacy
+  stat_summary(geom='errorbar', fun.data='mean_cl_boot',fun.min="min", fun.max="max",width=0.3,position=position_dodge(0.9),colour='black') + 
+  stat_summary(geom='point',fun='mean', position=position_dodge(0.9),size=3) +
+  stat_summary(geom='point',fun='mean', position=position_dodge(0.9),size=3,shape=1,colour='black') +
+  
+  #horizontal lines showing input
+ geom_hline(dat=inputs,aes(yintercept=casemarked),linetype=3) +
+  
+  #by-participant data
+  geom_dotplot(data=subset(casemarking.summary.by.animacy,IsCeiling!=1 & IsFloor!=1),binaxis = "y", stackdir = "center",alpha=0.5,dotsize=1,position=position_dodge(0.9),binpositions='all',binwidth=1/100) + 
+  geom_text(data=casemarking.ceiling.ns.collapsed,aes(x=Day,y=1.05,label=count),position=position_dodge(0.9),size=3,colour='black') +
+  geom_text(data=casemarking.floor.ns.collapsed,aes(x=Day,y=-0.05,label=count),position=position_dodge(0.9),size=3,colour='black') +
+  
+  #then various axis/legend stuff
+  xlab("Day") + 
+  theme_bw() + 
+  ylab("Proportion of case-marked objects") + 
+  theme(legend.title=element_blank()) + 
+  scale_fill_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate object", "Animate object")) +
+  scale_colour_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate object", "Animate object"))
+
+ggsave("Figures/casemarking.pdf",width=9, height=6)
+
+```
+Stat. Dummy-code Day so that intercept is day=2, deviation-code everything else.
+
+```{r}
+contrasts(data$Day) <- NULL
+contrasts(data$Animacy) <- c(-0.5,0.5)
+contrasts(data$EventType) <- c(-0.5,0.5)
+contrasts(data$ProportionMarked) <- c(-0.5,0.5)
+contrasts(data$MajorityInputOrder) <- c(-0.5,0.5)
+contrasts(data$OrderMarkedMore) <- c(-0.5,0.5)
+
+#will want a model where day 4 is the reference level (to confirm no DOM effect)
+data$Day4Ref <- relevel(data$Day,ref="4")
+contrasts(data$Day4Ref) <- NULL
+```
+
+Simpler model - dropping anything on word order in the input since this produces a slightly easier to interpret set of stats, although in the paper we include the second more complex model.
+
+```{r casemarking-stat-1,cache=TRUE}
+case.marking.model.1 <- glmer(casemarked ~ Animacy * ProportionMarked * EventType* Day + (1 + Animacy * Day | workerId),data=subset(data,Block=="SentenceTest1" & grammatical),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=50000)))
+```
+
+Day 2 shows no overall effect of animacy. The animacy * proportion interaction means that, at day 2, they are anti-DOM at 60% casemarking (less casemarking with animates) and DOM-like at 40% marking (more casemarking with animates), but the marginal 3-way interaction with day=4 means this is basically gone by day 4. Nothing else that is anywhere near significant involves animacy.
+```{r}
+summary(case.marking.model.1)
+```
+
+Including OrderMarkedMore, to account for learning of conditioning of casemarking on order in those conditions. Still nothing involving Animacy.
+
+```{r casemarking-stat-2,cache=TRUE}
+case.marking.model.2 <- glmer(casemarked ~ Animacy * ProportionMarked * OrderMarkedMore * EventType* Day + (1 + Animacy * Day | workerId),data=subset(data,Block=="SentenceTest1" & grammatical),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=50000)))
+```
+
+```{r}
+summary(case.marking.model.2)
+```
+
+Same, but re-levelled to check for Animacy effect at Day 4 - still no effect of animacy at Day 4, there is a marginal 3-way interaction Animacy1:ProportionMarked1:OrderMarkedMore1 which seems to be due to the OSV-majority, 60% casemarked language looking slightly different.
+
+```{r casemarking-stat-3,cache=TRUE}
+case.marking.model.3 <- glmer(casemarked ~ Animacy * ProportionMarked * OrderMarkedMore * EventType* Day4Ref + (1 + Animacy * Day4Ref | workerId),data=subset(data,Block=="SentenceTest1" & grammatical),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=50000)))
+```
+
+```{r}
+summary(case.marking.model.3)
+```
+
+
+```{r}
+aggregate(casemarked_numeric~Animacy+ProportionMarked+OrderMarkedMore,data=subset(data,Day==4),FUN=mean) -> temp
+ggplot(data=temp, aes(x=Animacy, y=casemarked_numeric,
+                                                     colour=Animacy,fill=Animacy)) +
+  facet_grid(ProportionMarked~OrderMarkedMore) +
+  geom_point()
+```
+
+
+A couple of additional models of interest that we want to check for DOM-like effects at day 4.
+
+The SOV-majority, 60% casemarking language is the FNJ Experiment 1 language.
+
+```{r fnjlanguage-casemarking-stat-1,cache=TRUE}
+fnjlanguage.marking.model.1 <- glmer(casemarked ~ Animacy * EventType* Day4Ref + (1 + Animacy * Day4Ref | workerId),data=subset(data,Block=="SentenceTest1" & grammatical & ProportionMarked=="60% Casemarked" & MajorityInputOrder=="SOV majority order"),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=50000)))
+```
+
+No significant animacy effect at Day 4.
+
+```{r}
+summary(fnjlanguage.marking.model.1)
+```
+
+The OSV-majority, 40% casemarking language has no preference to overuse OSV with animates (because it's OSV majority) *and* no tendency to condition casemarking on word order (because it marks SOV more often than OSV).
+
+```{r otherlanguage-casemarking-stat-1,cache=TRUE}
+otherlanguage.marking.model.1 <- glmer(casemarked ~ Animacy * EventType* Day4Ref + (1 + Animacy * Day4Ref | workerId),data=subset(data,Block=="SentenceTest1" & grammatical & ProportionMarked=="40% Casemarked" & MajorityInputOrder=="OSV majority order"),family=binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=50000)))
+```
+
+No significant animacy effect at Day 4.
+
+```{r}
+summary(otherlanguage.marking.model.1)
+```
+
+
+
+
+# Case marking and animacy during interaction
+
+```{r interaction-data}
+
+#since there is some data munging here, will set this up as a seperate data frame
+recall.vs.interaction.data <- subset(data,(Block=="Interaction" | Block=="SentenceTest1") & grammatical & Day==4)
+#want recall to be the reference level
+recall.vs.interaction.data$Block <- relevel(droplevels(as.factor(recall.vs.interaction.data$Block)),ref="SentenceTest1")
+
+recall.vs.interaction.summary <- aggregate(casemarked_numeric~Animacy+Block+EventType+ProportionMarked+workerId,data=recall.vs.interaction.data,FUN=mean)
+
+#prettier names for printing
+recall.vs.interaction.summary$Block <- revalue(recall.vs.interaction.summary$Block,
+                                         c("SentenceTest1"="Recall",
+                                           "Interaction"="Interaction"))
+```
+
+```{r interaction-plot}
+
+ggplot(data=recall.vs.interaction.summary, aes(x=Block, y=casemarked_numeric, 
+                                                    colour=Animacy, fill=Animacy)) +
+  facet_grid(EventType~ProportionMarked) +
+  #points and CIs for casemarking by animacy
+  stat_summary(geom='errorbar', fun.data='mean_cl_boot',fun.min="min", fun.max="max",width=0.3,position=position_dodge(0.9),color='black') + 
+  stat_summary(geom='point', fun='mean', position=position_dodge(0.9),size=3) +
+  stat_summary(geom='point', fun='mean', position=position_dodge(0.9),size=3,
+               shape=1,colour='black') +
+  
+  #horizontal lines showing input
+  geom_hline(dat=inputs,aes(yintercept=casemarked),linetype=3) +
+  #by-participant data
+  geom_dotplot(binaxis = "y", stackdir = "center",alpha=0.5,dotsize=1.5,position=position_dodge(0.9),binpositions='all',binwidth=1/100) + 
+  #then various axis/legend stuff
+  xlab("Block") + 
+  theme_bw() + 
+  ylab("Proportion of case-marked objects") + 
+  theme(legend.title=element_blank()) + 
+  scale_colour_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate object", "Animate object")) + 
+  scale_fill_manual(values=my.colours[2:3],breaks=c("FALSE", "TRUE"),labels=c("Inanimate object", "Animate object"))
+
+ggsave("Figures/interaction-casemarking.pdf",width=9, height=6)
+```
+
+
+
+Stat where block is treatment-coded (recall is intercept), everything else deviation coded.
+```{r}
+contrasts(recall.vs.interaction.data$Block) <- NULL
+contrasts(recall.vs.interaction.data$ProportionMarked) <- c(-0.5,0.5)
+contrasts(recall.vs.interaction.data$Animacy) <- c(-0.5,0.5)
+contrasts(recall.vs.interaction.data$EventType) <- c(-0.5,0.5)
+```
+
+```{r, interaction-stat,cache=TRUE}
+recall.vs.interaction.model.1 <- glmer(casemarked ~ Animacy * Block * EventType * ProportionMarked + (1 + Animacy *  Block | workerId),data=recall.vs.interaction.data,family=binomial,control=glmerControl(optimizer="bobyqa"))
+```
+
+A highly significant effect of Block=interaction *and* an interaction of animacy and Block -i.e. you get DOM when in interaction. Plus a significant interaction with EventType, i.e. this effect is amplified when genuine ambiguity ensues. Negative interaction with ProportionMarked though, suggesting this effect is smaller in the 60% casemarked input languages, exploring that below.
+
+```{r}
+summary(recall.vs.interaction.model.1)
+```
+
+Do we see the effect of animacy in interaction in the 60% casemarked languages? Checking with a relevelled model.
+
+```{r, interaction-stat-ref60,cache=TRUE}
+recall.vs.interaction.data$ProportionMarkedRef60 <- relevel(recall.vs.interaction.data$ProportionMarked,ref="60% Casemarked")
+contrasts(recall.vs.interaction.data$ProportionMarkedRef60) <- NULL
+
+recall.vs.interaction.model.ref60 <- glmer(casemarked ~ Animacy * Block * EventType * ProportionMarkedRef60 + (1 + Animacy *  Block | workerId),data=recall.vs.interaction.data,family=binomial,control=glmerControl(optimizer="bobyqa"))
+```
+
+This still shows a significant animacy x block interaction.
+```{r}
+summary(recall.vs.interaction.model.ref60)
+```
+
+
+# Word order variability and casemarking
+
+This is for the discussion section of the paper, trying to test whether participants who are more variable in their word order use casemarking more.
+
+## Word order variability and DOM
+
+Do participants who vary word order more (i.e. word order is less informative about argument structure) differentiate more? 
+
+Measure of word order variability: entropy.
+
+Measure of DOM: % marked animate objects - % marked inanimate objects
+
+Will look at day 4 and contrast recall and interaction.
+```{r}
+proportion.sov <- aggregate(isSOV~EventType+Day+Block+workerId,data=subset(data,Day==4 & (Block=="SentenceTest1" | Block=="Interaction") & grammatical),FUN=mean)
+
+proportion.sov$Block <- revalue(as.factor(proportion.sov$Block),
+                                         c("SentenceTest1"="Recall",
+                                           "Interaction"="Interaction"))
+proportion.sov$Block <- relevel(as.factor(proportion.sov$Block),ref="Recall")
+
+#add word order entropy
+proportion.sov$Entropy <- mapply(function(p) ifelse(p==0|p==1,0,(-p*log2(p)) + (-(1-p)*log2(1-p))),
+                                           proportion.sov$isSOV)       
+
+#OK, for DOM score can use existing recall.vs.interaction.summary as basis
+#but need to calculate diffs - easiest way is to make 2 columns giving % casemarked for animate and inanimate objects
+domscore <- tidyr::spread(recall.vs.interaction.summary,Animacy,casemarked_numeric)
+domscore$DOM <- domscore$'TRUE' - domscore$'FALSE'
+domscore$'FALSE' <- NULL
+domscore$'TRUE' <- NULL
+
+#now merge
+entropy.dom <- merge(proportion.sov,domscore,
+                               by=c("workerId","EventType","Block"))
+```
+
+Looks strikingly like no correspondence in either case.
+```{r}
+#and plot
+ggplot(entropy.dom,aes(x=Entropy,y=DOM)) +
+  facet_grid(EventType~Block) +
+  geom_point()
+```
+
+Appropriate stat? Result suggests no significant effect of word order variability on casemarking in either block.
+```{r}
+summary(lmer(DOM~Entropy * Block * EventType + (1 | workerId), data=entropy.dom))
+```
+
+Same stat excluding 0-word-order-entropy individuals.
+
+```{r}
+summary(lmer(DOM~Entropy * Block * EventType + (1 | workerId), data=subset(entropy.dom,Entropy>0)))
+```
+
+## Word order variability and casemarking overall
+
+Do participants who vary word order more (i.e. word order is less informative about argument structure) casemark more, irrespective of animacy? 
+
+Measure of word order variability: entropy.
+
+Measure of casemarking: % marked objects.
+
+Will look at day 4 and contrast recall and interaction.
+```{r}
+
+#for casemarking on day 4, use recall.vs.interaction.summary
+#merge
+entropy.marking <- merge(proportion.sov,recall.vs.interaction.summary,
+                               by=c("workerId","EventType","Block"))
+```
+
+Looks strikingly like no correspondence in either case.
+```{r}
+#and plot
+ggplot(entropy.marking,aes(x=Entropy,y=casemarked_numeric)) +
+  facet_grid(EventType~Block) +
+  geom_point(alpha=0.5)
+
+#and plot
+ggplot(entropy.marking,aes(x=Entropy,y=casemarked_numeric)) +
+  facet_grid(~Block) +
+  geom_point(alpha=0.5)
+
+```
+
+Appropriate stat? Result suggests no significant effect of word order variability on casemarking in either Block.
+```{r}
+contrasts(entropy.marking$EventType) <- c(-0.5,0.5)
+summary(lmer(casemarked_numeric~Entropy * Block * EventType + (1 | workerId), data=entropy.marking))
+```
+
+Same stat excluding 0-word-order-entropy individuals.
+
+```{r}
+summary(lmer(casemarked_numeric~Entropy * Block * EventType + (1 | workerId), data=subset(entropy.marking,Entropy>0)))
+```
